@@ -1,6 +1,7 @@
 package copilot
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 )
@@ -19,6 +20,15 @@ func TestRewriteModel_StripsPrefixAndReportsStream(t *testing.T) {
 	}
 	if m["model"] != "gpt-4o" {
 		t.Fatalf("model = %v, want gpt-4o (prefix stripped)", m["model"])
+	}
+}
+
+func TestRewriteModel_PreservesLargeInts(t *testing.T) {
+	// A big integer field (e.g. seed) must not be corrupted into float64 sci-notation.
+	body := []byte(`{"model":"copilot/gpt-4o","seed":9007199254740993,"messages":[]}`)
+	out, _ := rewriteModel(body)
+	if !bytes.Contains(out, []byte(`9007199254740993`)) {
+		t.Fatalf("large int corrupted: %s", out)
 	}
 }
 
