@@ -13,6 +13,7 @@ import (
 	"apiforge/internal/provider/claude"
 	"apiforge/internal/provider/codex"
 	"apiforge/internal/provider/copilot"
+	"apiforge/internal/provider/cursor"
 	"apiforge/internal/provider/gemini"
 	"apiforge/internal/provider/openaicompat"
 	"apiforge/internal/provider/qwen"
@@ -67,7 +68,27 @@ func RegisterAll(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
 	registerGemini(reg, cfg, log)
 	registerQwen(reg, cfg, log)
 	registerCopilot(reg, cfg, log)
-	// Phase 6+: cursor registered here.
+	registerCursor(reg, cfg, log)
+}
+
+// registerCursor wires the EXPERIMENTAL cursor provider. The session token comes
+// from CURSOR_ACCESS_TOKENS (list) or CURSOR_ACCESS_TOKEN (single); absence =
+// disabled (a headless host has no Cursor state.vscdb to read).
+func registerCursor(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	tokens := parseList(os.Getenv("CURSOR_ACCESS_TOKENS"))
+	if single := os.Getenv("CURSOR_ACCESS_TOKEN"); single != "" {
+		tokens = append(tokens, single)
+	}
+	if len(tokens) == 0 {
+		return
+	}
+	if p := cursor.New(tokens, cursor.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log); p != nil {
+		reg.Register(p)
+		log.Info("registered cursor (experimental)", "accounts", p.Pool().Size())
+	}
 }
 
 func registerQwen(reg *registry.Registry, cfg config.Config, log *slog.Logger) {

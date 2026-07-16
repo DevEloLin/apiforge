@@ -30,11 +30,11 @@ internal/
 
 ## Phases
 - [x] **P1 skeleton** — config, types, token base, pool, registry, server+middleware, /health, /v1/models, auth/ratelimit/bodylimit, fail-closed
-- [ ] P2 openaiCompat + custom (API-key relays)
+- [x] **P2 openaiCompat + custom** — vendor table (20) + user relays, account-key pool, live/static models, relay + account retry (429/401/5xx switch), concurrency cap + sticky
 - [x] **P3 codex** — CLI OAuth self-refresh + OpenAI API-key accounts; chat (translated OpenAI↔Codex Responses SSE, stream + aggregate), native /responses, images (gen + edits/img2img); account pool retry + concurrency + sticky
 - [x] **P4 claude + gemini** — claude: OAuth self-refresh + API-key; OpenAI↔Anthropic translation (stream+aggregate) + native /messages & count_tokens passthrough + Claude-Code identity injection. gemini-cli (EXPERIMENTAL, `GEMINI_OAUTH_ENABLED`): Google OAuth + Code Assist + OpenAI↔Gemini translation
 - [x] **P5 qwen + copilot** — qwen-cli: OAuth self-refresh + per-account base URL from resource_url. copilot: GitHub token→Copilot token exchange (single-flight), live /models with copilot/ prefix, editor fingerprint headers
-- [ ] P6 cursor (protobuf + checksum + state.vscdb); fallback-proxy to TS version if blocked
+- [x] **P6 cursor** (EXPERIMENTAL) — reverse-engineered AiService: hand-rolled protobuf + Connect-RPC framing (gzip) + Jyh checksum cipher; OpenAI chat (stream + aggregate). Token via `CURSOR_ACCESS_TOKEN(S)` — no SQLite engine dependency (a headless host has no `state.vscdb`; extract the token once from a desktop Cursor: `sqlite3 state.vscdb "select value from ItemTable where key='cursorAuth/accessToken'"`)
 - [ ] P7 parity diff vs TS · Dockerfile (scratch) · deploy to Pi + measure RAM
 
 ## Run
