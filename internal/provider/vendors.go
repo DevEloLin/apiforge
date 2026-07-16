@@ -34,4 +34,5 @@ var vendors = []vendorSpec{
 	{ID: "aws-bedrock", BaseURL: "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1", BaseURLEnv: "AWS_BEDROCK_BASE_URL", KeysEnv: "AWS_BEDROCK_API_KEYS", ModelsEnv: "AWS_BEDROCK_MODELS", OwnedBy: "amazon", DefaultModels: []string{"openai.gpt-oss-120b-1:0", "anthropic.claude-sonnet-4-5-20250929-v1:0", "amazon.nova-pro-v1:0", "meta.llama3-3-70b-instruct-v1:0"}},
 	{ID: "agnes", BaseURL: "https://apihub.agnes-ai.com/v1", KeysEnv: "AGNES_API_KEYS", ModelsEnv: "AGNES_MODELS", OwnedBy: "agnes-ai", DefaultModels: []string{"agnes-2.0-flash", "agnes-image-2.0-flash"}},
 	{ID: "openrouter", BaseURL: "https://openrouter.ai/api/v1", KeysEnv: "OPENROUTER_API_KEYS", ModelsEnv: "OPENROUTER_MODELS", OwnedBy: "openrouter", DefaultModels: []string{"openrouter/auto"}},
+	{ID: "grok", BaseURL: "https://api.x.ai/v1", KeysEnv: "XAI_API_KEYS", ModelsEnv: "GROK_MODELS", BaseURLEnv: "XAI_BASE_URL", OwnedBy: "xai", DefaultModels: []string{"grok-4", "grok-4-fast", "grok-3", "grok-3-mini"}},
 }

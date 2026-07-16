@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -33,23 +34,73 @@ func Do(ctx context.Context, url string, headers map[string]string, body []byte)
 
 // WithAccountRetry runs fn against the pool's candidate accounts, switching on
 // retriable failures. On a 2xx it holds the account's concurrency slot until
-// the response body is closed (so streaming counts toward the cap). Returns a
-// synthesized 503 when every account is unavailable.
+// the response body is closed (so streaming counts toward the cap).
+//
+// When every healthy account is at its concurrency cap, the request QUEUES:
+// it waits for a slot to free (Release broadcast) and retries, up to the
+// QUEUE_WAIT_MS budget (default 60s). This lets N accounts absorb bursts of
+// many concurrent users instead of failing the overflow immediately. Only when
+// accounts are truly unavailable (all cooling down / failed) does it return a
+// synthesized 503.
 func WithAccountRetry[C any](
 	ctx context.Context,
 	p *pool.Pool[C],
 	pin, session string,
 	fn func(acc pool.Account[C]) (*http.Response, error),
 ) (*http.Response, error) {
+	deadline := time.Now().Add(queueWait())
+	for {
+		// Grab the freed-channel BEFORE trying, so a Release that happens
+		// mid-attempt is not missed (close-broadcast races are lost otherwise).
+		freed := p.SlotFreed()
+
+		resp, err, busySkips := tryAccounts(ctx, p, pin, session, fn)
+		if resp != nil || err != nil {
+			return resp, err
+		}
+		if busySkips == 0 {
+			// Nothing was skipped for capacity — accounts genuinely failed.
+			return synth503("All upstream accounts are unavailable."), nil
+		}
+
+		// All healthy accounts busy: queue until a slot frees or budget runs out.
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return synth503("All upstream accounts are busy. Please retry."), nil
+		}
+		timer := time.NewTimer(remaining)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+			return synth503("All upstream accounts are busy. Please retry."), nil
+		case <-freed:
+			timer.Stop() // a slot opened — retry immediately
+		}
+	}
+}
+
+// tryAccounts makes one pass over the candidates. Returns (nil, nil, busySkips)
+// when no account produced a result: busySkips counts accounts skipped because
+// they were at their concurrency cap (queueable), as opposed to marked failures.
+func tryAccounts[C any](
+	ctx context.Context,
+	p *pool.Pool[C],
+	pin, session string,
+	fn func(acc pool.Account[C]) (*http.Response, error),
+) (*http.Response, error, int) {
+	busySkips := 0
 	for _, acc := range p.Candidates(pin, session) {
 		if !p.Acquire(acc.ID) {
-			continue // at concurrency cap — try the next account
+			busySkips++ // at concurrency cap — queueable
+			continue
 		}
 		resp, err := fn(acc)
 		if err != nil {
 			p.Release(acc.ID)
 			if ctx.Err() != nil {
-				return nil, ctx.Err() // client disconnected — don't blame the account
+				return nil, ctx.Err(), busySkips // client disconnected — don't blame the account
 			}
 			p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout: cool briefly
 			continue
@@ -59,7 +110,7 @@ func WithAccountRetry[C any](
 			p.MarkOk(acc.ID)
 			p.Bind(session, acc.ID)
 			resp.Body = &releaseCloser{ReadCloser: resp.Body, release: func() { p.Release(acc.ID) }}
-			return resp, nil
+			return resp, nil, busySkips
 		case resp.StatusCode == 429:
 			drain(resp)
 			p.Release(acc.ID)
@@ -76,10 +127,21 @@ func WithAccountRetry[C any](
 			// Non-retriable (400/404/422/deterministic 5xx): return upstream's
 			// error body to the client verbatim.
 			p.Release(acc.ID)
-			return resp, nil
+			return resp, nil, busySkips
 		}
 	}
-	return synth503(), nil
+	return nil, nil, busySkips
+}
+
+// queueWait is the max time a request may wait for a free concurrency slot.
+// Read per-call (cheap) so tests and operators can tune QUEUE_WAIT_MS live.
+func queueWait() time.Duration {
+	if v := os.Getenv("QUEUE_WAIT_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return 60 * time.Second
 }
 
 // JSONResponse wraps a value as a 200 application/json *http.Response — used by
@@ -153,11 +215,6 @@ func retryAfter(resp *http.Response) time.Duration {
 	return 0 // 0 => pool default
 }
 
-func synth503() *http.Response {
-	body := `{"error":{"message":"All upstream accounts are unavailable.","type":"api_error"}}`
-	return &http.Response{
-		StatusCode: http.StatusServiceUnavailable,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(bytes.NewReader([]byte(body))),
-	}
+func synth503(message string) *http.Response {
+	return SynthStatus(http.StatusServiceUnavailable, message)
 }
