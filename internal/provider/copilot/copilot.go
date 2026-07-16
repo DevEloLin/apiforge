@@ -4,6 +4,7 @@
 package copilot
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -96,9 +97,13 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 }
 
 // rewriteModel strips the "copilot/" prefix from the model id and reports stream.
+// UseNumber preserves integer fields (e.g. seed) exactly — a plain map[string]any
+// round-trip would turn every number into float64 and corrupt large ints.
 func rewriteModel(body []byte) ([]byte, bool) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
 	var m map[string]any
-	if json.Unmarshal(body, &m) != nil {
+	if dec.Decode(&m) != nil {
 		return body, false
 	}
 	if model, ok := m["model"].(string); ok {

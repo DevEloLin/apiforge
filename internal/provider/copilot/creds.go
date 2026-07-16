@@ -112,7 +112,14 @@ func (c *creds) exchange(ctx context.Context) (string, error) {
 	if data.Endpoints.API != "" {
 		apiBase = data.Endpoints.API
 	}
-	c.state.Store(&tokenState{token: data.Token, expiresMs: data.ExpiresAt * 1000, apiBase: apiBase})
+	// Defensive: if the response omits expires_at, don't leave expiresMs=0 (which
+	// would disable the freshness check and force a token exchange on every
+	// request, self-inflicting GitHub rate limits). Fall back to a short TTL.
+	expiresMs := data.ExpiresAt * 1000
+	if data.ExpiresAt <= 0 {
+		expiresMs = time.Now().Add(25 * time.Minute).UnixMilli()
+	}
+	c.state.Store(&tokenState{token: data.Token, expiresMs: expiresMs, apiBase: apiBase})
 	return data.Token, nil
 }
 
