@@ -6,6 +6,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"apiforge/internal/pool"
 )
 
 // Capability is an optional surface a provider can serve beyond OpenAI chat.
@@ -103,6 +105,12 @@ type AnthropicProvider interface {
 	Provider
 	Messages(rctx RequestContext, body []byte) (*http.Response, error)
 	CountTokens(rctx RequestContext, body []byte) (*http.Response, error)
+}
+
+// Pooled is implemented by providers backed by an account pool, exposing the
+// type-erased pool surface for the /admin account-control API.
+type Pooled interface {
+	AccountPool() pool.Admin
 }
 
 // HasCapability reports whether p declares c.

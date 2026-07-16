@@ -1,11 +1,17 @@
 package server
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 )
+
+// constantTimeEqual compares two secrets without leaking length/content via timing.
+func constantTimeEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
 
 // bearer extracts the token from an Authorization: Bearer <token> header, or
 // the x-api-key header (Anthropic style).
@@ -41,7 +47,7 @@ func (s *Server) adminMiddleware(next http.Handler) http.Handler {
 			s.writeError(w, r, http.StatusForbidden, "invalid_request_error", "Admin API is disabled (ADMIN_TOKEN not set).")
 			return
 		}
-		if bearer(r) != s.cfg.AdminToken {
+		if !constantTimeEqual(bearer(r), s.cfg.AdminToken) {
 			s.writeError(w, r, http.StatusUnauthorized, "invalid_request_error", "Invalid admin token.")
 			return
 		}

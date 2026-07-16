@@ -87,6 +87,7 @@ func (p *Provider) Capabilities() []types.Capability { return []types.Capability
 func (p *Provider) IsReady() bool                    { return p.ready }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[auth]           { return p.pool }
+func (p *Provider) AccountPool() pool.Admin          { return p.pool }
 func (p *Provider) OwnsModel(model string) bool      { return strings.HasPrefix(model, "claude") }
 
 // Init is ready if any OAuth account warms or any API key is present.

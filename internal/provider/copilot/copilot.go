@@ -49,6 +49,7 @@ func (p *Provider) Capabilities() []types.Capability { return nil }
 func (p *Provider) IsReady() bool                    { return p.ready }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[*creds]         { return p.pool }
+func (p *Provider) AccountPool() pool.Admin          { return p.pool }
 func (p *Provider) OwnsModel(model string) bool      { return strings.HasPrefix(model, "copilot/") }
 
 // Init discovers GitHub tokens, builds the pool, and advertises live models.

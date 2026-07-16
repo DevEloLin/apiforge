@@ -77,6 +77,18 @@ func (r *Registry) FindByModel(model string) types.Provider {
 	return nil
 }
 
+// ByID returns the ready provider with the given id, or nil.
+func (r *Registry) ByID(id string) types.Provider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, p := range r.providers {
+		if p.IsReady() && p.ID() == id {
+			return p
+		}
+	}
+	return nil
+}
+
 // Models aggregates the advertised models of all ready providers.
 func (r *Registry) Models() []types.ModelObject {
 	r.mu.RLock()

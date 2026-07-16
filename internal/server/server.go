@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"apiforge/internal/config"
+	"apiforge/internal/pool"
 	"apiforge/internal/registry"
 	"apiforge/internal/types"
 	"apiforge/internal/util/sanitize"
@@ -45,7 +46,10 @@ func New(cfg config.Config, reg *registry.Registry, log *slog.Logger) http.Handl
 	mux.Handle("/v1/", chain(v1, s.authMiddleware, s.rateLimitMiddleware, s.bodyLimitMiddleware))
 
 	admin := http.NewServeMux()
+	admin.HandleFunc("GET /admin/providers", s.adminProviders)
 	admin.HandleFunc("GET /admin/accounts", s.adminAccounts)
+	admin.HandleFunc("POST /admin/accounts/preferred", s.adminSetPreferred)
+	admin.HandleFunc("POST /admin/accounts/enabled", s.adminSetEnabled)
 	mux.Handle("/admin/", chain(admin, s.adminMiddleware, s.rateLimitMiddleware, s.bodyLimitMiddleware))
 
 	return mux
@@ -265,10 +269,108 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// adminProviders lists every ready provider, its models, and whether it is pooled.
+func (s *Server) adminProviders(w http.ResponseWriter, _ *http.Request) {
+	type prov struct {
+		ID     string   `json:"id"`
+		Models []string `json:"models"`
+		Pooled bool     `json:"pooled"`
+	}
+	out := []prov{}
+	for _, p := range s.reg.Ready() {
+		_, pooled := p.(types.Pooled)
+		ids := make([]string, 0)
+		for _, m := range p.ListModels() {
+			ids = append(ids, m.ID)
+		}
+		out = append(out, prov{ID: p.ID(), Models: ids, Pooled: pooled})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"providers": out})
+}
+
+// adminAccounts reports per-provider account health for pooled providers.
 func (s *Server) adminAccounts(w http.ResponseWriter, _ *http.Request) {
-	// Phase 1 placeholder: per-provider account health is exposed here once
-	// providers register their pools (Phase 2+).
-	writeJSON(w, http.StatusOK, map[string]any{"accounts": []any{}, "note": "provider pools wired in later phases"})
+	out := map[string]any{}
+	for _, p := range s.reg.Ready() {
+		if pp, ok := p.(types.Pooled); ok {
+			out[p.ID()] = pp.AccountPool().Status()
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": out})
+}
+
+// adminSetPreferred pins (or clears, with an empty account) the preferred account.
+func (s *Server) adminSetPreferred(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Provider string `json:"provider"`
+		Account  string `json:"account"`
+	}
+	if !s.decodeAdmin(w, r, &body) {
+		return
+	}
+	adm := s.poolFor(w, r, body.Provider)
+	if adm == nil {
+		return
+	}
+	if !adm.SetPreferred(body.Account) {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Unknown account: "+body.Account)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "provider": body.Provider, "preferred": body.Account})
+}
+
+// adminSetEnabled enables/disables one account in a provider's pool.
+func (s *Server) adminSetEnabled(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Provider string `json:"provider"`
+		Account  string `json:"account"`
+		Enabled  *bool  `json:"enabled"`
+	}
+	if !s.decodeAdmin(w, r, &body) {
+		return
+	}
+	if body.Account == "" {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Missing 'account'.")
+		return
+	}
+	enabled := body.Enabled == nil || *body.Enabled
+	adm := s.poolFor(w, r, body.Provider)
+	if adm == nil {
+		return
+	}
+	if !adm.SetEnabled(body.Account, enabled) {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Unknown account: "+body.Account)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "provider": body.Provider, "account": body.Account, "enabled": enabled})
+}
+
+// decodeAdmin decodes a JSON admin body and validates the provider field.
+func (s *Server) decodeAdmin(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Invalid JSON body.")
+		return false
+	}
+	return true
+}
+
+// poolFor resolves a provider's admin pool surface, writing an error if missing.
+func (s *Server) poolFor(w http.ResponseWriter, r *http.Request, providerID string) pool.Admin {
+	if providerID == "" {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Missing 'provider'.")
+		return nil
+	}
+	p := s.reg.ByID(providerID)
+	if p == nil {
+		s.writeError(w, r, http.StatusNotFound, "invalid_request_error", "Unknown provider: "+providerID)
+		return nil
+	}
+	pp, ok := p.(types.Pooled)
+	if !ok {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Provider "+providerID+" has no account pool.")
+		return nil
+	}
+	return pp.AccountPool()
 }
 
 // ---- helpers ---------------------------------------------------------------

@@ -314,6 +314,14 @@ func (p *Pool[C]) SetEnabled(id string, enabled bool) bool {
 	return true
 }
 
+// Admin is the type-erased account-control surface the /admin API uses, so it
+// can operate on any provider's pool without knowing its credential type.
+type Admin interface {
+	Status() []AccountStatus
+	SetPreferred(id string) bool
+	SetEnabled(id string, enabled bool) bool
+}
+
 // AccountStatus is a health snapshot for the admin API.
 type AccountStatus struct {
 	ID             string `json:"id"`
