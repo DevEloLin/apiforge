@@ -53,4 +53,4 @@
 - **真机 E2E 通过：** `codex`（非流/流式 chat、文生图）、`copilot`（48 模型、chat）、admin API。
 - **格式/单测已验证，实时待重登复测：** `claude`（刷新请求格式已由 Anthropic 语义化限流响应证明正确）。
 - **仅代码 + 单测（本机无登录）：** `qwen`、`gemini`、`cursor`、`grok-web`。
-- 约 36 个单测覆盖翻译 / protobuf / 排队层。
+- 约 52 个单测覆盖翻译 / protobuf / 排队层。

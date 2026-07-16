@@ -26,6 +26,17 @@ All notable changes are documented here. Format based on
   constant-time admin-token comparison.
 - Gemini OAuth client is **not vendored**; supply via `GEMINI_OAUTH_CLIENT_ID` / `_SECRET`.
 
+### Hardening (multi-perspective code audit)
+- **Crash-safety:** streaming goroutine `recover()`; account-retry frees the concurrency slot on
+  every path incl. panic; cursor protobuf length-prefix guards (no panic / no giant allocation).
+- **Resilience:** token-refresh failure no longer blacks out the whole pool for 5 min; upstream
+  200-then-failure / truncated / non-JSON bodies surface an error instead of a fake empty 200;
+  codex "no image" is non-retriable; copilot token-cache fallback + big-int preservation.
+- **Correctness:** claude `content:null` tool-call turns; SSE/NDJSON reader has no line-length cap;
+  cursor concatenates batched deltas; `/v1/models` de-duplicated; bad request bodies → 400 not 502.
+- **Security:** SSRF resolves hostnames; constant-time client-key check; upstream identity headers
+  (Set-Cookie / org / cf-ray) stripped; keyFile guard fail-closed; secret redaction in logs.
+
 ### Notes
 - Reverse-engineered providers (`cursor`, `grok-web`) and `gemini-cli` are EXPERIMENTAL / opt-in.
-- See [docs/PARITY.md](./PARITY.md) for verification status.
+- See [PARITY.md](./PARITY.md) for verification status.

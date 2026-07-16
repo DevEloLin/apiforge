@@ -56,4 +56,4 @@ Goal: no functional loss, minus the intentionally dropped frontend.
 - **Format/unit-verified, live pending fresh login:** `claude` (refresh request format confirmed
   via Anthropic's semantic rate-limit response).
 - **Code + unit only (no local login):** `qwen`, `gemini`, `cursor`, `grok-web`.
-- ~36 unit tests across translation / protobuf / queueing layers.
+- 52 unit tests across translation / protobuf / queueing layers.
