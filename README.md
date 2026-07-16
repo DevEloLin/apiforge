@@ -3,6 +3,9 @@
 **把你本机各家 AI CLI / 订阅登录，聚合成一个统一的 OpenAI / Anthropic 兼容 API 网关。**
 单文件 Go 二进制，无前端、无数据库，静态镜像约 7MB，可跑在 1GB 树莓派上。
 
+> 📖 **完整手册**：[使用手册 USAGE.md](./docs/USAGE.md)（客户端调用） ·
+> [操作手册 OPERATIONS.md](./docs/OPERATIONS.md)（安装/配置/Docker 打包与部署/运维）
+
 > English TL;DR: apiforge is a lean, single-binary Go gateway that **reuses your
 > local AI CLI / subscription logins** (Codex/Claude/Copilot/Gemini/Qwen/Cursor/Grok)
 > and re-exposes them behind one OpenAI- and Anthropic-compatible API. It also
