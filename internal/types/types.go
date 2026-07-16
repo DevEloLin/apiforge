@@ -46,6 +46,29 @@ func ModelObjects(ids []string, ownedBy string) []ModelObject {
 	return out
 }
 
+// ImageInput is one uploaded image (edits / img2img), base64-encoded so the
+// normalized image request stays a plain JSON []byte across the provider API.
+type ImageInput struct {
+	B64         string `json:"b64"`
+	ContentType string `json:"content_type"`
+	Filename    string `json:"filename"`
+}
+
+// ImageRequest is the gateway's normalized image request. The server builds it
+// from either a JSON /images/generations body or a multipart /images/edits form;
+// a non-empty Images slice marks it as an edit (image-to-image).
+type ImageRequest struct {
+	Model        string       `json:"model"`
+	Prompt       string       `json:"prompt"`
+	N            int          `json:"n,omitempty"`
+	Size         string       `json:"size,omitempty"`
+	Quality      string       `json:"quality,omitempty"`
+	Background   string       `json:"background,omitempty"`
+	OutputFormat string       `json:"output_format,omitempty"`
+	Images       []ImageInput `json:"images,omitempty"`
+	Mask         *ImageInput  `json:"mask,omitempty"`
+}
+
 // Provider is the core contract every upstream implements. OpenAI Chat
 // Completions is the lingua franca; extra surfaces are opt-in via the
 // capability interfaces below (checked by type assertion in the router).

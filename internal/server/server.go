@@ -5,10 +5,12 @@
 package server
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"apiforge/internal/config"
@@ -38,7 +40,8 @@ func New(cfg config.Config, reg *registry.Registry, log *slog.Logger) http.Handl
 	v1.HandleFunc("POST /v1/responses", s.responses)
 	v1.HandleFunc("POST /v1/messages", s.messages)
 	v1.HandleFunc("POST /v1/messages/count_tokens", s.countTokens)
-	v1.HandleFunc("POST /v1/images/generations", s.images)
+	v1.HandleFunc("POST /v1/images/generations", s.imageGenerations)
+	v1.HandleFunc("POST /v1/images/edits", s.imageEdits)
 	mux.Handle("/v1/", chain(v1, s.authMiddleware, s.rateLimitMiddleware, s.bodyLimitMiddleware))
 
 	admin := http.NewServeMux()
@@ -122,10 +125,132 @@ func (s *Server) responses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) images(w http.ResponseWriter, r *http.Request) {
-	s.dispatch(w, r, types.CapImages, func(p types.Provider, rc types.RequestContext, b []byte) (*http.Response, error) {
-		return p.(types.ImagesProvider).Images(rc, b)
-	})
+// defaultImageModel is used when the client omits `model` (OpenAI convention).
+const defaultImageModel = "gpt-image-1"
+
+// multipartMaxMemory bounds in-memory buffering of multipart parts; larger parts
+// spill to a temp file. The overall size is still capped by bodyLimitMiddleware.
+const multipartMaxMemory = 8 << 20
+
+func (s *Server) imageGenerations(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Failed to read request body.")
+		return
+	}
+	var req types.ImageRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Invalid JSON body.")
+		return
+	}
+	req.Images = nil // generations never carries input images
+	req.Mask = nil
+	if req.Prompt == "" {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Missing required parameter: 'prompt'.")
+		return
+	}
+	s.dispatchImages(w, r, req)
+}
+
+func (s *Server) imageEdits(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(multipartMaxMemory); err != nil {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Expected multipart/form-data within the size limit.")
+		return
+	}
+	prompt := r.FormValue("prompt")
+	if prompt == "" {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Missing required parameter: 'prompt'.")
+		return
+	}
+	images := collectFormImages(r, "image")
+	if len(images) == 0 {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "Missing required file: 'image'.")
+		return
+	}
+	req := types.ImageRequest{
+		Model:   r.FormValue("model"),
+		Prompt:  prompt,
+		Size:    r.FormValue("size"),
+		Quality: r.FormValue("quality"),
+		Images:  images,
+	}
+	if n, err := strconv.Atoi(r.FormValue("n")); err == nil {
+		req.N = n
+	}
+	if mask := collectFormImages(r, "mask"); len(mask) > 0 {
+		req.Mask = &mask[0]
+	}
+	s.dispatchImages(w, r, req)
+}
+
+// dispatchImages resolves the image-capable provider by model and hands off the
+// normalized request as a JSON body (uniform provider contract).
+func (s *Server) dispatchImages(w http.ResponseWriter, r *http.Request, req types.ImageRequest) {
+	if req.Model == "" {
+		req.Model = defaultImageModel
+	}
+	p := s.reg.FindByModel(req.Model)
+	if p == nil {
+		s.writeError(w, r, http.StatusNotFound, "invalid_request_error", "No provider serves model: "+req.Model)
+		return
+	}
+	if !types.HasCapability(p, types.CapImages) {
+		s.writeError(w, r, http.StatusBadRequest, "invalid_request_error", "The model `"+req.Model+"` does not support the Images API on this gateway.")
+		return
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		s.writeError(w, r, http.StatusInternalServerError, "api_error", "Failed to encode request.")
+		return
+	}
+	rctx := types.RequestContext{
+		RequestID:  r.Header.Get("x-request-id"),
+		Ctx:        r.Context(),
+		AccountPin: r.Header.Get("x-apiforge-account"),
+		Session:    r.Header.Get("x-apiforge-session"),
+	}
+	resp, err := p.(types.ImagesProvider).Images(rctx, body)
+	if err != nil {
+		s.log.Error("provider error", "provider", p.ID(), "err", err)
+		s.writeError(w, r, http.StatusBadGateway, "api_error", "Upstream request failed.")
+		return
+	}
+	writeUpstream(w, resp)
+}
+
+// collectFormImages reads uploaded files under field and field[] as base64 inputs.
+func collectFormImages(r *http.Request, field string) []types.ImageInput {
+	if r.MultipartForm == nil {
+		return nil
+	}
+	var out []types.ImageInput
+	for _, key := range []string{field, field + "[]"} {
+		for _, fh := range r.MultipartForm.File[key] {
+			f, err := fh.Open()
+			if err != nil {
+				continue
+			}
+			data, err := io.ReadAll(f)
+			f.Close()
+			if err != nil {
+				continue
+			}
+			ct := fh.Header.Get("Content-Type")
+			if ct == "" {
+				ct = "image/png"
+			}
+			name := fh.Filename
+			if name == "" {
+				name = field + ".png"
+			}
+			out = append(out, types.ImageInput{
+				B64:         base64.StdEncoding.EncodeToString(data),
+				ContentType: ct,
+				Filename:    name,
+			})
+		}
+	}
+	return out
 }
 
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {

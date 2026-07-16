@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"apiforge/internal/config"
+	"apiforge/internal/provider/codex"
 	"apiforge/internal/provider/openaicompat"
 	"apiforge/internal/registry"
 	"apiforge/internal/util/ssrf"
@@ -57,7 +58,25 @@ func RegisterAll(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
 		log.Info("registered custom relays", "count", len(customs))
 	}
 
-	// Phase 3+: codex / claude / gemini / qwen / copilot / cursor registered here.
+	registerCodex(reg, cfg, log)
+	// Phase 4+: claude / gemini / qwen / copilot / cursor registered here.
+}
+
+// registerCodex wires the Codex provider from its CLI credential paths plus any
+// OPENAI_API_KEYS. codex.New returns nil when no account is configured.
+func registerCodex(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	pc, ok := cfg.Providers["codex"]
+	if !ok || !pc.Enabled {
+		return
+	}
+	p := codex.New(pc.CredentialPaths, parseList(os.Getenv("OPENAI_API_KEYS")), codex.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log)
+	if p != nil {
+		reg.Register(p)
+		log.Info("registered codex", "accounts", p.Pool().Size())
+	}
 }
 
 func parseList(v string) []string {
