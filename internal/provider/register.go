@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"apiforge/internal/config"
+	"apiforge/internal/provider/claude"
 	"apiforge/internal/provider/codex"
+	"apiforge/internal/provider/gemini"
 	"apiforge/internal/provider/openaicompat"
 	"apiforge/internal/registry"
 	"apiforge/internal/util/ssrf"
@@ -59,7 +61,55 @@ func RegisterAll(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
 	}
 
 	registerCodex(reg, cfg, log)
-	// Phase 4+: claude / gemini / qwen / copilot / cursor registered here.
+	registerClaude(reg, cfg, log)
+	registerGemini(reg, cfg, log)
+	// Phase 5+: qwen / copilot / cursor registered here.
+}
+
+// registerClaude wires the Claude provider from OAuth credential paths plus any
+// ANTHROPIC_API_KEYS.
+func registerClaude(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	pc, ok := cfg.Providers["claude"]
+	if !ok || !pc.Enabled {
+		return
+	}
+	p := claude.New(pc.CredentialPaths, parseList(os.Getenv("ANTHROPIC_API_KEYS")), claude.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log)
+	if p != nil {
+		reg.Register(p)
+		log.Info("registered claude", "accounts", p.Pool().Size())
+	}
+}
+
+// registerGemini wires the EXPERIMENTAL gemini-cli provider (Code Assist OAuth
+// reuse). Opt-in via GEMINI_OAUTH_ENABLED to avoid surprising unverified routing.
+func registerGemini(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	if !boolEnv("GEMINI_OAUTH_ENABLED") {
+		return
+	}
+	pc, ok := cfg.Providers["gemini"]
+	if !ok || !pc.Enabled {
+		return
+	}
+	p := gemini.New(pc.CredentialPaths, gemini.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log)
+	if p != nil {
+		reg.Register(p)
+		log.Info("registered gemini-cli (experimental)", "accounts", p.Pool().Size())
+	}
+}
+
+func boolEnv(name string) bool {
+	switch strings.ToLower(os.Getenv(name)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // registerCodex wires the Codex provider from its CLI credential paths plus any

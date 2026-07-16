@@ -6,6 +6,7 @@ package relay
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -79,6 +80,49 @@ func WithAccountRetry[C any](
 		}
 	}
 	return synth503(), nil
+}
+
+// JSONResponse wraps a value as a 200 application/json *http.Response — used by
+// translating providers to hand a synthesized body to the account-retry layer.
+func JSONResponse(v any) *http.Response {
+	b, _ := json.Marshal(v)
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader(b)),
+	}
+}
+
+// StreamingResponse returns a 200 text/event-stream *http.Response whose body is
+// produced by produce (run in a goroutine writing translated SSE frames). produce
+// is responsible for closing any upstream body it reads.
+func StreamingResponse(produce func(w io.Writer)) *http.Response {
+	pr, pw := io.Pipe()
+	go func() {
+		produce(pw)
+		_ = pw.Close()
+	}()
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":      []string{"text/event-stream; charset=utf-8"},
+			"Cache-Control":     []string{"no-cache, no-transform"},
+			"X-Accel-Buffering": []string{"no"},
+		},
+		Body: pr,
+	}
+}
+
+// SynthStatus builds a small JSON error response with the given status — used to
+// steer the account-retry classifier (e.g. a 401 on token-refresh failure).
+func SynthStatus(status int, message string) *http.Response {
+	msg, _ := json.Marshal(message)
+	body := `{"error":{"message":` + string(msg) + `,"type":"api_error"}}`
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(bytes.NewReader([]byte(body))),
+	}
 }
 
 // releaseCloser frees the concurrency slot exactly once when the body closes.

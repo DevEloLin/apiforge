@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 
+	"apiforge/internal/relay"
 	"apiforge/internal/util/httpx"
 )
 
@@ -41,7 +41,7 @@ func userAgent() string {
 func codexFetch(ctx context.Context, c *creds, body any, sessionID string) (*http.Response, error) {
 	tok, err := c.AccessToken(ctx)
 	if err != nil {
-		return synthStatus(http.StatusUnauthorized, "codex token refresh failed"), nil
+		return relay.SynthStatus(http.StatusUnauthorized, "codex token refresh failed"), nil
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -62,18 +62,4 @@ func codexFetch(ctx context.Context, c *creds, body any, sessionID string) (*htt
 		req.Header.Set("chatgpt-account-id", acct)
 	}
 	return httpx.Client.Do(req)
-}
-
-func synthStatus(status int, msg string) *http.Response {
-	body := `{"error":{"message":` + strconvQuote(msg) + `,"type":"api_error"}}`
-	return &http.Response{
-		StatusCode: status,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(bytes.NewReader([]byte(body))),
-	}
-}
-
-func strconvQuote(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b)
 }
