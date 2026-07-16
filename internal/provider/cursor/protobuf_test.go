@@ -80,6 +80,14 @@ func TestExtractResponseText(t *testing.T) {
 	}
 }
 
+func TestExtractResponseText_ConcatenatesBatchedDeltas(t *testing.T) {
+	// A frame batching two field-2 sub-messages must yield both texts, not just the first.
+	payload := append(msgField(2, strField(1, "Hello ")), msgField(2, strField(1, "world"))...)
+	if got := extractResponseText(payload); got != "Hello world" {
+		t.Fatalf("extractResponseText = %q, want 'Hello world'", got)
+	}
+}
+
 func TestStreamDeltas_MultiFrameAndTrailer(t *testing.T) {
 	// Two data frames + one trailer frame (flag 0x02) that must be skipped.
 	var buf bytes.Buffer
