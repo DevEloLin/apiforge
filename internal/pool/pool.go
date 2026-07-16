@@ -54,6 +54,7 @@ type Pool[C any] struct {
 	cursor    int
 	preferred string
 	sticky    map[string]stickyEntry // sessionKey -> account
+	freed     chan struct{}          // closed+replaced on every Release (slot-freed broadcast)
 	log       *slog.Logger
 }
 
@@ -92,6 +93,7 @@ func New[C any](accounts []Account[C], opts Options, log *slog.Logger) *Pool[C] 
 		conc:      opts.MaxConcurrency,
 		stickyTTL: opts.StickyTTL,
 		sticky:    map[string]stickyEntry{},
+		freed:     make(chan struct{}),
 		log:       log,
 	}
 }
@@ -242,13 +244,25 @@ func (p *Pool[C]) Acquire(id string) bool {
 	return true
 }
 
-// Release frees a concurrency slot previously taken with Acquire.
+// Release frees a concurrency slot previously taken with Acquire and wakes any
+// requests queued in SlotFreed.
 func (p *Pool[C]) Release(id string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if idx, ok := p.byID[id]; ok && p.states[idx].inflight > 0 {
 		p.states[idx].inflight--
+		close(p.freed) // broadcast to queued waiters
+		p.freed = make(chan struct{})
 	}
+}
+
+// SlotFreed returns a channel that is closed the next time any concurrency slot
+// frees. Callers re-fetch it after each wakeup (the channel is replaced on every
+// Release). Used to queue requests when every account is at its cap.
+func (p *Pool[C]) SlotFreed() <-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.freed
 }
 
 // MarkOk clears automatic cooldown/failure state (keeps a manual disable).

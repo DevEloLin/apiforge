@@ -169,15 +169,17 @@ func Load() Config {
 	}
 
 	return Config{
-		Host:                  envStr("HOST", "127.0.0.1"),
-		Port:                  envInt("PORT", 8899),
-		LogLevel:              envStr("LOG_LEVEL", "info"),
-		APIKeys:               envList("API_KEYS"),
-		AdminToken:            os.Getenv("ADMIN_TOKEN"),
-		UpstreamTimeoutMs:     envInt("UPSTREAM_TIMEOUT_MS", 600000),
-		MaxBodyBytes:          envInt64("MAX_BODY_BYTES", 10<<20),
-		RateLimitRPM:          envInt("RATE_LIMIT_RPM", 0),
-		MaxAccountConcurrency: envInt("MAX_ACCOUNT_CONCURRENCY", 0),
+		Host:              envStr("HOST", "127.0.0.1"),
+		Port:              envInt("PORT", 8899),
+		LogLevel:          envStr("LOG_LEVEL", "info"),
+		APIKeys:           envList("API_KEYS"),
+		AdminToken:        os.Getenv("ADMIN_TOKEN"),
+		UpstreamTimeoutMs: envInt("UPSTREAM_TIMEOUT_MS", 600000),
+		MaxBodyBytes:      envInt64("MAX_BODY_BYTES", 10<<20),
+		RateLimitRPM:      envInt("RATE_LIMIT_RPM", 0),
+		// Default 3: protects subscription accounts from bursts (queueing absorbs
+		// the overflow via QUEUE_WAIT_MS). Set 0 to disable the cap entirely.
+		MaxAccountConcurrency: envInt("MAX_ACCOUNT_CONCURRENCY", 3),
 		StickyTTLSeconds:      envInt("STICKY_TTL_SECONDS", 0),
 		Providers:             providers,
 	}
