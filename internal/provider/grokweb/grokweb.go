@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -37,7 +38,7 @@ type Provider struct {
 	ownedBy string
 	models  []string
 	pool    *pool.Pool[string] // each account = one sso cookie / cookie string
-	ready   bool
+	ready   atomic.Bool
 	log     *slog.Logger
 }
 
@@ -70,14 +71,14 @@ func New(cookies []string, cfg Config, log *slog.Logger) *Provider {
 
 func (p *Provider) ID() string                       { return "grok-web" }
 func (p *Provider) Capabilities() []types.Capability { return nil }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[string]         { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
 func (p *Provider) OwnsModel(model string) bool      { return strings.HasPrefix(model, modelPrefix) }
 
 func (p *Provider) Init(_ context.Context) error {
-	p.ready = true
+	p.ready.Store(true)
 	if p.log != nil {
 		p.log.Warn("grok-web provider is EXPERIMENTAL (reverse-engineered grok.com web API; Cloudflare may challenge)")
 	}
@@ -93,7 +94,7 @@ type chatRequest struct {
 func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	spec := resolveModel(strings.TrimPrefix(req.Model, modelPrefix))
 	payload, _ := json.Marshal(buildPayload(foldMessages(req.Messages), spec))

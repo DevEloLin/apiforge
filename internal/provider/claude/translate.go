@@ -243,10 +243,11 @@ func messagesToAny(messages []msg) []any {
 }
 
 func maxTokens(req chatRequest) int {
-	if req.MaxCompletionTokens != nil {
+	// Anthropic requires max_tokens >= 1; a client's 0/negative would 400.
+	if req.MaxCompletionTokens != nil && *req.MaxCompletionTokens > 0 {
 		return *req.MaxCompletionTokens
 	}
-	if req.MaxTokens != nil {
+	if req.MaxTokens != nil && *req.MaxTokens > 0 {
 		return *req.MaxTokens
 	}
 	return defaultMaxTokens

@@ -172,7 +172,13 @@ func (c *creds) Refresh(ctx context.Context) (string, error) {
 	if data.ResourceURL != "" {
 		next.ResourceURL = data.ResourceURL
 	}
-	next.ExpiryDate = time.Now().UnixMilli() + data.ExpiresIn*1000
+	// Guard against a missing expires_in (0) which would set ExpiryDate=now and
+	// force a token refresh on every request.
+	expiresIn := data.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 3600
+	}
+	next.ExpiryDate = time.Now().UnixMilli() + expiresIn*1000
 	c.sanitizeResourceURL(&next)
 	if err := filestore.WriteJSONAtomic(c.path, &next); err != nil && c.log != nil {
 		c.log.Warn("could not persist refreshed Qwen token", "err", err)

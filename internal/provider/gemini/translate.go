@@ -202,8 +202,8 @@ func openaiToGeminiRequest(req chatRequest) map[string]any {
 	if mt := maxTokens(req); mt > 0 {
 		genConfig["maxOutputTokens"] = mt
 	}
-	if len(req.Stop) > 0 {
-		genConfig["stopSequences"] = stopSequences(req.Stop)
+	if seqs := stopSequences(req.Stop); len(seqs) > 0 {
+		genConfig["stopSequences"] = seqs // omit when "stop" is null/empty (avoids upstream 400)
 	}
 
 	request := map[string]any{"contents": contentsToAny(contents), "generationConfig": genConfig}
