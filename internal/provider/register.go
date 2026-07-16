@@ -15,6 +15,7 @@ import (
 	"apiforge/internal/provider/copilot"
 	"apiforge/internal/provider/cursor"
 	"apiforge/internal/provider/gemini"
+	"apiforge/internal/provider/grokweb"
 	"apiforge/internal/provider/openaicompat"
 	"apiforge/internal/provider/qwen"
 	"apiforge/internal/registry"
@@ -69,6 +70,25 @@ func RegisterAll(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
 	registerQwen(reg, cfg, log)
 	registerCopilot(reg, cfg, log)
 	registerCursor(reg, cfg, log)
+	registerGrokWeb(reg, cfg, log)
+}
+
+// registerGrokWeb wires the EXPERIMENTAL grok.com subscription-reuse provider.
+// Session cookies come from GROK_COOKIES (list); absence = disabled. Each entry
+// is a bare `sso` value or a full `k=v; k=v` cookie string (add cf_clearance if
+// Cloudflare challenges).
+func registerGrokWeb(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	cookies := parseList(os.Getenv("GROK_COOKIES"))
+	if len(cookies) == 0 {
+		return
+	}
+	if p := grokweb.New(cookies, grokweb.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log); p != nil {
+		reg.Register(p)
+		log.Info("registered grok-web (experimental)", "accounts", p.Pool().Size())
+	}
 }
 
 // registerCursor wires the EXPERIMENTAL cursor provider. The session token comes

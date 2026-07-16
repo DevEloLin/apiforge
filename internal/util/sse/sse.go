@@ -59,6 +59,20 @@ func Frames(r io.Reader) iter.Seq[Event] {
 	}
 }
 
+// Lines returns an iterator over the raw newline-delimited lines of r (for
+// NDJSON streams like Grok's, which are not SSE-framed). Stops at EOF/error.
+func Lines(r io.Reader) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+		for sc.Scan() {
+			if !yield(sc.Text()) {
+				return
+			}
+		}
+	}
+}
+
 // DataFrame formats a `data: <payload>` SSE frame (payload is written verbatim,
 // so it must not contain a newline-delimited blank line).
 func DataFrame(payload string) []byte { return []byte("data: " + payload + "\n\n") }
