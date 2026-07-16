@@ -4,8 +4,8 @@
 
 ## English
 
-Thanks for your interest! First, please read the **[README notice](./README.md#-important-notice--read-first)**
-and the **[LICENSE](./LICENSE)** — this is a **personal-research** project, and any contribution
+Thanks for your interest! First, please read the **[README notice](../README.md#-important-notice--read-first)**
+and the **[LICENSE](../LICENSE)** — this is a **personal-research** project, and any contribution
 must respect the non-removable attribution terms (LICENSE §2).
 
 ### Dev setup
@@ -21,7 +21,7 @@ Requires Go 1.26+ (see `go.mod`). The project uses **only** the standard library
 ### Guidelines
 - Match the existing style: small focused files, immutable data, early returns, clear names.
 - Keep the binary lean (it targets a 1 GB Raspberry Pi / ~7 MB scratch image).
-- New provider? See **[ARCHITECTURE.md § Adding a provider](./docs/ARCHITECTURE.md#adding-a-provider)**
+- New provider? See **[ARCHITECTURE.md § Adding a provider](./ARCHITECTURE.md#adding-a-provider)**
   and add unit tests for the translation layer.
 - Commit messages: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).
 - Do **not** commit real credentials, tokens, or vendor client secrets.
@@ -37,8 +37,8 @@ Requires Go 1.26+ (see `go.mod`). The project uses **only** the standard library
 
 ## 中文
 
-感谢关注！开始前请先阅读 **[README 重要提醒](./README.zh-CN.md#-重要提醒务必先读)** 与
-**[LICENSE](./LICENSE)** —— 本项目**仅供个人研究**，任何贡献都须遵守“来源署名不可移除”条款
+感谢关注！开始前请先阅读 **[README 重要提醒](../README.zh-CN.md#-重要提醒务必先读)** 与
+**[LICENSE](../LICENSE)** —— 本项目**仅供个人研究**，任何贡献都须遵守“来源署名不可移除”条款
 （LICENSE §2）。
 
 ### 开发环境
@@ -54,7 +54,7 @@ gofmt -l .         # 应无输出（用 `gofmt -w .` 修复）
 ### 约定
 - 与现有风格一致：小而聚焦的文件、不可变数据、早返回、清晰命名。
 - 保持二进制精简（目标是 1GB 树莓派 / 约 7MB scratch 镜像）。
-- 新增 provider？见 **[ARCHITECTURE.md 新增 provider](./docs/ARCHITECTURE.zh-CN.md#新增-provider)**，
+- 新增 provider？见 **[ARCHITECTURE.md 新增 provider](./ARCHITECTURE.zh-CN.md#新增-provider)**，
   并为翻译层补单元测试。
 - 提交信息用 Conventional Commits（`feat:`/`fix:`/`docs:`/`refactor:`/`test:`/`chore:`）。
 - **切勿**提交真实凭据、token 或厂商 client secret。
