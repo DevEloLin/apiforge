@@ -5,6 +5,7 @@ package types
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 // Capability is an optional surface a provider can serve beyond OpenAI chat.
@@ -30,6 +31,19 @@ type RequestContext struct {
 	Ctx       context.Context
 	// AccountPin is a manual account id from the `x-apiforge-account` header.
 	AccountPin string
+	// Session is an optional sticky-session key (`x-apiforge-session` header):
+	// requests sharing it route to the same account when healthy.
+	Session string
+}
+
+// ModelObjects builds OpenAI /v1/models entries from a list of ids.
+func ModelObjects(ids []string, ownedBy string) []ModelObject {
+	now := time.Now().Unix()
+	out := make([]ModelObject, len(ids))
+	for i, id := range ids {
+		out[i] = ModelObject{ID: id, Object: "model", Created: now, OwnedBy: ownedBy}
+	}
+	return out
 }
 
 // Provider is the core contract every upstream implements. OpenAI Chat

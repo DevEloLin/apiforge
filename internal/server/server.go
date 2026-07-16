@@ -99,6 +99,7 @@ func (s *Server) dispatch(w http.ResponseWriter, r *http.Request, need types.Cap
 		RequestID:  r.Header.Get("x-request-id"),
 		Ctx:        r.Context(),
 		AccountPin: r.Header.Get("x-apiforge-account"),
+		Session:    r.Header.Get("x-apiforge-session"),
 	}
 	resp, err := fn(p, rctx, body)
 	if err != nil {
