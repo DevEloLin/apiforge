@@ -167,6 +167,11 @@ func assertAllowedKeyFile(path, root string) error {
 	if allowAnyKeyFile() {
 		return nil
 	}
+	// Fail closed if the root couldn't be resolved: an empty root would make the
+	// prefix check `HasPrefix(real, "/")` pass for ANY absolute path.
+	if root == "" {
+		return fmt.Errorf("keyFile blocked: creds root unresolved (set CREDS_ROOT or ALLOW_ANY_KEYFILE=1)")
+	}
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return fmt.Errorf("keyFile %s cannot be resolved (must exist under %s)", path, root)

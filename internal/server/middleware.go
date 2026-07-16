@@ -27,17 +27,26 @@ func bearer(r *http.Request) string {
 // authMiddleware gates /v1 behind the client API keys. An empty key set means
 // auth is disabled (dev only; main() refuses this on a non-loopback bind).
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	allow := map[string]bool{}
-	for _, k := range s.cfg.APIKeys {
-		allow[k] = true
-	}
+	keys := append([]string(nil), s.cfg.APIKeys...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(allow) == 0 || allow[bearer(r)] {
+		if len(keys) == 0 || anyConstantTimeEqual(keys, bearer(r)) {
 			next.ServeHTTP(w, r)
 			return
 		}
 		s.writeError(w, r, http.StatusUnauthorized, "invalid_request_error", "Invalid API key.")
 	})
+}
+
+// anyConstantTimeEqual reports whether presented matches any key, comparing every
+// key in constant time (no early exit / no map-lookup timing signal).
+func anyConstantTimeEqual(keys []string, presented string) bool {
+	match := false
+	for _, k := range keys {
+		if constantTimeEqual(k, presented) {
+			match = true
+		}
+	}
+	return match
 }
 
 // adminMiddleware gates /admin behind ADMIN_TOKEN (empty => admin disabled).
