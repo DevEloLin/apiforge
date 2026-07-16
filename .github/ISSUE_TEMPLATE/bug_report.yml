@@ -1,0 +1,42 @@
+name: Bug report / 缺陷报告
+description: Report a problem / 报告一个问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do **not** include real tokens, cookies, or API keys.
+        请**不要**贴真实 token、cookie 或 API key。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / 发生了什么？
+      description: Describe the bug and expected behavior. / 描述缺陷与预期行为。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Commands / request (redact secrets). / 命令或请求（脱敏）。
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider / model involved / 涉及的来源或模型
+      placeholder: e.g. codex / claude-sonnet-5 / grok-web/grok-4.2
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment / 环境
+      description: OS/arch, run mode (source/docker/systemd), version/commit. / 系统架构、运行方式、版本/commit。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / 日志
+      description: Relevant log lines (already redacted by apiforge). / 相关日志（apiforge 已脱敏）。
+      render: shell
