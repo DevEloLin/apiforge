@@ -88,6 +88,29 @@ func TestOpenAIToAnthropic_AssistantToolCallAndToolResult(t *testing.T) {
 	}
 }
 
+func TestOpenAIToAnthropic_AssistantNullContentNoEmptyBlock(t *testing.T) {
+	// The standard tool-call turn: content:null + tool_calls. Must NOT produce an
+	// empty text block (Anthropic 400s on those) — only the tool_use block.
+	req := chatRequest{
+		Model: "claude-sonnet-5",
+		Messages: []chatMessage{
+			{Role: "user", Content: json.RawMessage(`"weather?"`)},
+			{Role: "assistant", Content: json.RawMessage(`null`), ToolCalls: []toolCall{{ID: "t1", Function: struct {
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+			}{Name: "get_weather", Arguments: `{}`}}}},
+		},
+	}
+	out := openaiToAnthropic(req)
+	asst := out["messages"].([]any)[1].(map[string]any)["content"].([]any)
+	if len(asst) != 1 {
+		t.Fatalf("assistant content blocks = %d, want 1 (tool_use only, no empty text)", len(asst))
+	}
+	if asst[0].(map[string]any)["type"] != "tool_use" {
+		t.Fatalf("block = %v, want tool_use", asst[0])
+	}
+}
+
 func TestAnthropicToOpenAI_TextAndTool(t *testing.T) {
 	raw := []byte(`{
 		"content":[
