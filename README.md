@@ -32,7 +32,7 @@ internal/
 - [x] **P1 skeleton** — config, types, token base, pool, registry, server+middleware, /health, /v1/models, auth/ratelimit/bodylimit, fail-closed
 - [ ] P2 openaiCompat + custom (API-key relays)
 - [x] **P3 codex** — CLI OAuth self-refresh + OpenAI API-key accounts; chat (translated OpenAI↔Codex Responses SSE, stream + aggregate), native /responses, images (gen + edits/img2img); account pool retry + concurrency + sticky
-- [ ] P4 claude + gemini (OAuth + openai↔anthropic/gemini translation + SSE)
+- [x] **P4 claude + gemini** — claude: OAuth self-refresh + API-key; OpenAI↔Anthropic translation (stream+aggregate) + native /messages & count_tokens passthrough + Claude-Code identity injection. gemini-cli (EXPERIMENTAL, `GEMINI_OAUTH_ENABLED`): Google OAuth + Code Assist + OpenAI↔Gemini translation
 - [ ] P5 qwen + copilot
 - [ ] P6 cursor (protobuf + checksum + state.vscdb); fallback-proxy to TS version if blocked
 - [ ] P7 parity diff vs TS · Dockerfile (scratch) · deploy to Pi + measure RAM

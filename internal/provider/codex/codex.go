@@ -4,7 +4,6 @@
 package codex
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -257,7 +256,7 @@ func (p *Provider) Images(rctx types.RequestContext, body []byte) (*http.Respons
 		}
 	}
 	if len(out) == 0 {
-		return synthStatus(http.StatusBadGateway, "The backend did not return an image."), nil
+		return relay.SynthStatus(http.StatusBadGateway, "The backend did not return an image."), nil
 	}
 	if len(out) < n && p.log != nil {
 		p.log.Warn("fewer images than requested", "want", n, "got", len(out))
@@ -291,7 +290,7 @@ func (p *Provider) oneImage(rctx types.RequestContext, req types.ImageRequest) *
 			defer upstream.Body.Close()
 			img := collectImage(upstream.Body)
 			if img == nil {
-				return synthStatus(http.StatusBadGateway, "no image in stream"), nil
+				return relay.SynthStatus(http.StatusBadGateway, "no image in stream"), nil
 			}
 			return imageEnvelope(img), nil
 		})
@@ -328,7 +327,7 @@ func (p *Provider) keyImage(ctx context.Context, key string, req types.ImageRequ
 	defer res.Body.Close()
 	img := firstImageFromJSON(res.Body)
 	if img == nil {
-		return synthStatus(http.StatusBadGateway, "no image in response"), nil
+		return relay.SynthStatus(http.StatusBadGateway, "no image in response"), nil
 	}
 	return imageEnvelope(img), nil
 }
@@ -351,31 +350,13 @@ func (p *Provider) keyImageEdit(ctx context.Context, key string, req types.Image
 // ---- response helpers ------------------------------------------------------
 
 func streamResponse(upstream *http.Response, model string) *http.Response {
-	pr, pw := io.Pipe()
-	go func() {
+	return relay.StreamingResponse(func(w io.Writer) {
 		defer upstream.Body.Close()
-		StreamChatCompletion(pw, upstream.Body, model)
-		_ = pw.Close()
-	}()
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header: http.Header{
-			"Content-Type":      []string{"text/event-stream; charset=utf-8"},
-			"Cache-Control":     []string{"no-cache, no-transform"},
-			"X-Accel-Buffering": []string{"no"},
-		},
-		Body: pr,
-	}
+		StreamChatCompletion(w, upstream.Body, model)
+	})
 }
 
-func jsonResponse(v any) *http.Response {
-	b, _ := json.Marshal(v)
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(bytes.NewReader(b)),
-	}
-}
+func jsonResponse(v any) *http.Response { return relay.JSONResponse(v) }
 
 func imageEnvelope(img *collectedImage) *http.Response {
 	return jsonResponse(map[string]any{
