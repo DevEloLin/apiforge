@@ -31,7 +31,7 @@ internal/
 ## Phases
 - [x] **P1 skeleton** — config, types, token base, pool, registry, server+middleware, /health, /v1/models, auth/ratelimit/bodylimit, fail-closed
 - [ ] P2 openaiCompat + custom (API-key relays)
-- [ ] P3 codex (responses + images, OAuth self-refresh)
+- [x] **P3 codex** — CLI OAuth self-refresh + OpenAI API-key accounts; chat (translated OpenAI↔Codex Responses SSE, stream + aggregate), native /responses, images (gen + edits/img2img); account pool retry + concurrency + sticky
 - [ ] P4 claude + gemini (OAuth + openai↔anthropic/gemini translation + SSE)
 - [ ] P5 qwen + copilot
 - [ ] P6 cursor (protobuf + checksum + state.vscdb); fallback-proxy to TS version if blocked
