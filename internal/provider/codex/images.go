@@ -112,11 +112,13 @@ type collectedImage struct {
 
 // collectImage consumes a Responses SSE stream and returns the generated image,
 // preferring the final result and only falling back to the last partial if the
-// stream actually completed (a truncated partial would be misleading).
-func collectImage(upstream io.Reader) *collectedImage {
+// stream actually completed (a truncated partial would be misleading). The
+// returned completed flag lets the caller tell a deterministic "no image"
+// (refusal/empty on a completed stream — not worth retrying) from a truncation.
+func collectImage(upstream io.Reader) (img *collectedImage, completed bool) {
 	var lastPartial, outputFormat, size string
 	outputFormat = "png"
-	completed := false
+	completed = false
 
 	for ev := range sse.Frames(upstream) {
 		if ev.Data == "" || ev.Data == "[DONE]" {
@@ -148,15 +150,15 @@ func collectImage(upstream io.Reader) *collectedImage {
 						outputFormat:  firstNonEmpty(str(item["output_format"]), outputFormat),
 						size:          firstNonEmpty(str(item["size"]), size),
 						revisedPrompt: str(item["revised_prompt"]),
-					}
+					}, completed
 				}
 			}
 		}
 	}
 	if completed && lastPartial != "" {
-		return &collectedImage{b64: lastPartial, outputFormat: outputFormat, size: size}
+		return &collectedImage{b64: lastPartial, outputFormat: outputFormat, size: size}, completed
 	}
-	return nil
+	return nil, completed
 }
 
 // toImagesResponse emits the official OpenAI Images API response shape.
