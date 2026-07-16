@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 
-	"apiforge/internal/relay"
 	"apiforge/internal/util/httpx"
 )
 
@@ -41,7 +41,9 @@ func userAgent() string {
 func codexFetch(ctx context.Context, c *creds, body any, sessionID string) (*http.Response, error) {
 	tok, err := c.AccessToken(ctx)
 	if err != nil {
-		return relay.SynthStatus(http.StatusUnauthorized, "codex token refresh failed"), nil
+		// Surface the real error so the retry layer cools this account briefly
+		// (or, on client cancellation, short-circuits) — never a 5-min auth blackout.
+		return nil, fmt.Errorf("codex token refresh: %w", err)
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {

@@ -6,6 +6,7 @@ package copilot
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -88,7 +89,7 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 		func(acc pool.Account[*creds]) (*http.Response, error) {
 			tok, err := acc.Cred.copilotToken(rctx.Ctx)
 			if err != nil {
-				return relay.SynthStatus(http.StatusUnauthorized, "copilot token exchange failed"), nil
+				return nil, fmt.Errorf("copilot token exchange: %w", err)
 			}
 			return relay.Do(rctx.Ctx, acc.Cred.apiBaseURL()+"/chat/completions", chatHeaders(tok, stream), upstreamBody)
 		})

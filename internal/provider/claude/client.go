@@ -3,11 +3,11 @@ package claude
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
-	"apiforge/internal/relay"
 	"apiforge/internal/util/httpx"
 )
 
@@ -58,7 +58,8 @@ func anthropicFetch(ctx context.Context, a auth, path string, body []byte) (*htt
 	if a.kind == "oauth" {
 		tok, err := a.creds.AccessToken(ctx)
 		if err != nil {
-			return relay.SynthStatus(http.StatusUnauthorized, "claude token refresh failed"), nil
+			// Real error → brief cooldown / cancellation short-circuit, not a 5-min blackout.
+			return nil, fmt.Errorf("claude token refresh: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("anthropic-beta", oauthBeta)
