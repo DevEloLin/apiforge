@@ -192,12 +192,14 @@ type toolAcc struct {
 }
 
 type collector struct {
-	text   string
-	tools  map[string]*toolAcc
-	order  []string
-	finish string
-	inTok  int
-	outTok int
+	text      string
+	tools     map[string]*toolAcc
+	order     []string
+	finish    string
+	inTok     int
+	outTok    int
+	completed bool // saw response.completed
+	failed    bool // saw response.failed
 }
 
 func newCollector() *collector {
@@ -265,6 +267,7 @@ func (c *collector) apply(evt map[string]any) delta {
 		return delta{}
 
 	case "response.completed":
+		c.completed = true
 		if resp, ok := evt["response"].(map[string]any); ok {
 			if u, ok := resp["usage"].(map[string]any); ok {
 				c.inTok = intOf(u["input_tokens"])
@@ -272,7 +275,10 @@ func (c *collector) apply(evt map[string]any) delta {
 			}
 		}
 	case "response.incomplete":
+		c.completed = true
 		c.finish = "length"
+	case "response.failed":
+		c.failed = true
 	}
 	return delta{}
 }
@@ -340,8 +346,10 @@ func StreamChatCompletion(w io.Writer, upstream io.Reader, model string) {
 }
 
 // AggregateChatCompletion consumes a Codex responses SSE stream and returns one
-// OpenAI chat.completion object (non-streaming callers).
-func AggregateChatCompletion(upstream io.Reader, model string) map[string]any {
+// OpenAI chat.completion object (non-streaming callers). ok is false when the
+// upstream failed or truncated with no usable output — the caller must then
+// surface an error rather than a fake empty 200.
+func AggregateChatCompletion(upstream io.Reader, model string) (result map[string]any, ok bool) {
 	c := newCollector()
 	for ev := range sse.Frames(upstream) {
 		if ev.Data == "" || ev.Data == "[DONE]" {
@@ -352,6 +360,13 @@ func AggregateChatCompletion(upstream io.Reader, model string) map[string]any {
 			continue
 		}
 		c.apply(evt)
+	}
+
+	// No usable output AND the stream did not complete normally → treat as an
+	// upstream failure (backend error / content policy / truncated connection),
+	// never a silent empty success.
+	if c.failed || (!c.completed && c.text == "" && len(c.order) == 0) {
+		return nil, false
 	}
 
 	toolCalls := make([]any, 0, len(c.order))
@@ -385,7 +400,7 @@ func AggregateChatCompletion(upstream io.Reader, model string) map[string]any {
 			"prompt_tokens": c.inTok, "completion_tokens": c.outTok,
 			"total_tokens": c.inTok + c.outTok,
 		},
-	}
+	}, true
 }
 
 // AggregateResponses consumes a Codex responses SSE stream and returns one

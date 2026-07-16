@@ -189,7 +189,13 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 				return streamResponse(upstream, req.Model), nil
 			}
 			defer upstream.Body.Close()
-			return jsonResponse(AggregateChatCompletion(upstream.Body, req.Model)), nil
+			body, ok := AggregateChatCompletion(upstream.Body, req.Model)
+			if !ok {
+				// Upstream returned 200 then failed/truncated — surface an error
+				// (retriable on another account) instead of a fake empty success.
+				return relay.SynthStatus(http.StatusBadGateway, "codex: upstream returned no completion"), nil
+			}
+			return jsonResponse(body), nil
 		})
 }
 

@@ -166,7 +166,12 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 				}), nil
 			}
 			defer upstream.Body.Close()
-			raw, _ := io.ReadAll(upstream.Body)
+			raw, rerr := io.ReadAll(upstream.Body)
+			if rerr != nil || !json.Valid(raw) {
+				// A 200 with a torn/HTML/non-JSON body must not become a fake
+				// empty completion — surface it so the retry layer can react.
+				return relay.SynthStatus(http.StatusBadGateway, "claude: invalid upstream response body"), nil
+			}
 			return relay.JSONResponse(anthropicToOpenAI(raw, req.Model)), nil
 		})
 }

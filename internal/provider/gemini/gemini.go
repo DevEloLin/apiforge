@@ -110,7 +110,10 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 				}), nil
 			}
 			defer upstream.Body.Close()
-			raw, _ := io.ReadAll(upstream.Body)
+			raw, rerr := io.ReadAll(upstream.Body)
+			if rerr != nil || !json.Valid(raw) {
+				return relay.SynthStatus(http.StatusBadGateway, "gemini: invalid upstream response body"), nil
+			}
 			return relay.JSONResponse(geminiToOpenAI(raw, req.Model)), nil
 		})
 }

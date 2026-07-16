@@ -96,7 +96,10 @@ func TestAggregateChatCompletion_TextAndUsage(t *testing.T) {
 		}},
 	)
 
-	out := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5")
+	out, ok := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5")
+	if !ok {
+		t.Fatal("expected ok=true for a completed stream")
+	}
 
 	choices := out["choices"].([]any)
 	msg := choices[0].(map[string]any)["message"].(map[string]any)
@@ -122,7 +125,10 @@ func TestAggregateChatCompletion_ToolCall(t *testing.T) {
 		map[string]any{"type": "response.completed", "response": map[string]any{}},
 	)
 
-	out := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5")
+	out, ok := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5")
+	if !ok {
+		t.Fatal("expected ok=true for a completed stream")
+	}
 
 	choice := out["choices"].([]any)[0].(map[string]any)
 	if choice["finish_reason"] != "tool_calls" {
@@ -132,6 +138,23 @@ func TestAggregateChatCompletion_ToolCall(t *testing.T) {
 	fn := calls[0].(map[string]any)["function"].(map[string]any)
 	if fn["name"] != "get_weather" || fn["arguments"] != `{"city":"NYC"}` {
 		t.Fatalf("tool call = %v", fn)
+	}
+}
+
+func TestAggregateChatCompletion_UpstreamFailedIsNotOK(t *testing.T) {
+	// 200-then-response.failed with no content must NOT become a fake empty 200.
+	stream := sseStream(map[string]any{"type": "response.failed",
+		"response": map[string]any{"error": map[string]any{"message": "usage cap"}}})
+	if _, ok := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5"); ok {
+		t.Fatal("expected ok=false when upstream emits response.failed")
+	}
+}
+
+func TestAggregateChatCompletion_TruncatedEmptyIsNotOK(t *testing.T) {
+	// No completed event and no output → truncated → not ok.
+	stream := sseStream(map[string]any{"type": "response.output_text.delta", "delta": ""})
+	if _, ok := AggregateChatCompletion(strings.NewReader(stream), "gpt-5.5"); ok {
+		t.Fatal("expected ok=false for a truncated empty stream")
 	}
 }
 
