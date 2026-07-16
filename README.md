@@ -43,5 +43,15 @@ internal/
 API_KEYS=sk-... PORT=8899 HOST=127.0.0.1 go run ./cmd/apiforge
 ```
 Env: `API_KEYS`, `ADMIN_TOKEN`, `HOST`, `PORT`, `RATE_LIMIT_RPM`,
-`MAX_ACCOUNT_CONCURRENCY`, `STICKY_TTL_SECONDS`, `<PROVIDER>_AUTH(S)`,
-`ALLOW_UNAUTHENTICATED`.
+`MAX_ACCOUNT_CONCURRENCY` (default 3/account; 0 = uncapped),
+`QUEUE_WAIT_MS` (default 60000 — how long a request queues for a free slot when
+all accounts are at cap, instead of failing), `STICKY_TTL_SECONDS`,
+`<PROVIDER>_AUTH(S)`, `ALLOW_UNAUTHENTICATED`.
+
+## Concurrency model
+Per-account cap (`MAX_ACCOUNT_CONCURRENCY`) protects subscription accounts from
+bursts; overflow requests **queue** (up to `QUEUE_WAIT_MS`) for a freed slot
+rather than failing. A streamed response holds its slot until the stream closes.
+Example: 2 accounts × cap 3 = 6 in flight; a burst of 20 users runs 6 at a time
+and the rest wait their turn — verified live (10 concurrent vs 2×cap1 → 10/10
+success, 1.0–5.2s staggered).
