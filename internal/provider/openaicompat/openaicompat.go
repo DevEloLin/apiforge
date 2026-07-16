@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -42,7 +43,7 @@ type Provider struct {
 	extraHeaders map[string]string
 	models       []string
 	pool         *pool.Pool[string]
-	ready        bool
+	ready        atomic.Bool
 	log          *slog.Logger
 }
 
@@ -76,7 +77,7 @@ func idFor(id string, n int) string { return id + "#" + strconv.Itoa(n) }
 
 func (p *Provider) ID() string                       { return p.id }
 func (p *Provider) Capabilities() []types.Capability { return nil }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[string]         { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
@@ -101,7 +102,7 @@ func (p *Provider) Init(ctx context.Context) error {
 		}
 		p.models = live
 	}
-	p.ready = true
+	p.ready.Store(true)
 	return nil
 }
 

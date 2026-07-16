@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -43,7 +44,7 @@ type Provider struct {
 	ownedBy string
 	models  []string
 	pool    *pool.Pool[string]
-	ready   bool
+	ready   atomic.Bool
 	log     *slog.Logger
 }
 
@@ -77,14 +78,14 @@ func New(tokens []string, cfg Config, log *slog.Logger) *Provider {
 
 func (p *Provider) ID() string                       { return "cursor" }
 func (p *Provider) Capabilities() []types.Capability { return nil }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[string]         { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
 func (p *Provider) OwnsModel(model string) bool      { return strings.HasPrefix(model, "cursor/") }
 
 func (p *Provider) Init(_ context.Context) error {
-	p.ready = true
+	p.ready.Store(true)
 	if p.log != nil {
 		p.log.Warn("cursor provider is EXPERIMENTAL (reverse-engineered protobuf API)")
 	}
@@ -107,7 +108,7 @@ type chatMessage struct {
 func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	model := strings.TrimPrefix(req.Model, "cursor/")
 	messages := buildMessages(req.Messages)

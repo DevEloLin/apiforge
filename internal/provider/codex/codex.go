@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -43,7 +44,7 @@ type Provider struct {
 	apiBase string
 	models  []string
 	pool    *pool.Pool[account]
-	ready   bool
+	ready   atomic.Bool
 	log     *slog.Logger
 }
 
@@ -107,7 +108,7 @@ func (p *Provider) ID() string { return "codex" }
 func (p *Provider) Capabilities() []types.Capability {
 	return []types.Capability{types.CapResponses, types.CapImages}
 }
-func (p *Provider) IsReady() bool                   { return p.ready }
+func (p *Provider) IsReady() bool                   { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[account]       { return p.pool }
 func (p *Provider) AccountPool() pool.Admin         { return p.pool }
@@ -150,7 +151,7 @@ func (p *Provider) Init(ctx context.Context) error {
 		}
 		return errNoAccount
 	}
-	p.ready = true
+	p.ready.Store(true)
 	return nil
 }
 
@@ -169,7 +170,7 @@ func (p *Provider) keyHeaders(key string) map[string]string {
 func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	return relay.WithAccountRetry(rctx.Ctx, p.pool, rctx.AccountPin, rctx.Session,
 		func(acc pool.Account[account]) (*http.Response, error) {
@@ -204,7 +205,7 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 func (p *Provider) Responses(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	wantStream, _ := raw["stream"].(bool)
 	model := str(raw["model"])
@@ -242,7 +243,7 @@ func (p *Provider) Responses(rctx types.RequestContext, body []byte) (*http.Resp
 func (p *Provider) Images(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req types.ImageRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	n := clampN(req.N)
 	images := make([]*collectedImage, n)

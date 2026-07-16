@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -34,7 +35,7 @@ type Provider struct {
 	models  []string
 	pool    *pool.Pool[*creds]
 	project string
-	ready   bool
+	ready   atomic.Bool
 	log     *slog.Logger
 }
 
@@ -66,7 +67,7 @@ func New(credentialPaths []string, cfg Config, log *slog.Logger) *Provider {
 
 func (p *Provider) ID() string                       { return "gemini-cli" }
 func (p *Provider) Capabilities() []types.Capability { return nil }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[*creds]         { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
@@ -81,7 +82,7 @@ func (p *Provider) Init(ctx context.Context) error {
 		return err
 	}
 	p.project = discoverProject(ctx, first, p.log)
-	p.ready = true
+	p.ready.Store(true)
 	if p.log != nil {
 		p.log.Warn("gemini-cli provider is EXPERIMENTAL (Code Assist reuse, unverified)")
 	}
@@ -91,7 +92,7 @@ func (p *Provider) Init(ctx context.Context) error {
 func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	request := openaiToGeminiRequest(req)
 	return relay.WithAccountRetry(rctx.Ctx, p.pool, rctx.AccountPin, rctx.Session,

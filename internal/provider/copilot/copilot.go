@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -37,7 +38,7 @@ type Provider struct {
 	cfg        Config
 	models     []string
 	pool       *pool.Pool[*creds]
-	ready      bool
+	ready      atomic.Bool
 	log        *slog.Logger
 }
 
@@ -48,7 +49,7 @@ func New(configDirs []string, cfg Config, log *slog.Logger) *Provider {
 
 func (p *Provider) ID() string                       { return "copilot" }
 func (p *Provider) Capabilities() []types.Capability { return nil }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[*creds]         { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
@@ -80,7 +81,7 @@ func (p *Provider) Init(ctx context.Context) error {
 	for i, id := range ids {
 		p.models[i] = "copilot/" + id
 	}
-	p.ready = true
+	p.ready.Store(true)
 	return nil
 }
 

@@ -89,14 +89,24 @@ func (r *Registry) ByID(id string) types.Provider {
 	return nil
 }
 
-// Models aggregates the advertised models of all ready providers.
+// Models aggregates the advertised models of all ready providers, de-duplicated
+// by id (first ready owner wins — matching FindByModel's routing precedence, so
+// /v1/models never lists the same id twice when two providers share it).
 func (r *Registry) Models() []types.ModelObject {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var out []types.ModelObject
+	seen := map[string]bool{}
 	for _, p := range r.providers {
-		if p.IsReady() {
-			out = append(out, p.ListModels()...)
+		if !p.IsReady() {
+			continue
+		}
+		for _, m := range p.ListModels() {
+			if seen[m.ID] {
+				continue
+			}
+			seen[m.ID] = true
+			out = append(out, m)
 		}
 	}
 	return out

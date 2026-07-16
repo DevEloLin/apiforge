@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"apiforge/internal/pool"
@@ -36,7 +37,7 @@ type Provider struct {
 	ownedBy string
 	models  []string
 	pool    *pool.Pool[auth]
-	ready   bool
+	ready   atomic.Bool
 	log     *slog.Logger
 }
 
@@ -84,7 +85,7 @@ func New(credentialPaths, apiKeys []string, cfg Config, log *slog.Logger) *Provi
 
 func (p *Provider) ID() string                       { return "claude" }
 func (p *Provider) Capabilities() []types.Capability { return []types.Capability{types.CapAnthropic} }
-func (p *Provider) IsReady() bool                    { return p.ready }
+func (p *Provider) IsReady() bool                    { return p.ready.Load() }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[auth]           { return p.pool }
 func (p *Provider) AccountPool() pool.Admin          { return p.pool }
@@ -119,7 +120,7 @@ func (p *Provider) Init(ctx context.Context) error {
 		}
 		return errNoAccount
 	}
-	p.ready = true
+	p.ready.Store(true)
 	return nil
 }
 
@@ -146,7 +147,7 @@ func oauthPatch(body map[string]any, a auth) []byte {
 func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http.Response, error) {
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	anthropicBody := openaiToAnthropic(req)
 	return relay.WithAccountRetry(rctx.Ctx, p.pool, rctx.AccountPin, rctx.Session,
@@ -189,7 +190,7 @@ func (p *Provider) CountTokens(rctx types.RequestContext, body []byte) (*http.Re
 func (p *Provider) native(rctx types.RequestContext, path string, body []byte) (*http.Response, error) {
 	var parsed map[string]any
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, err
+		return relay.SynthStatus(http.StatusBadRequest, "invalid request body"), nil
 	}
 	return relay.WithAccountRetry(rctx.Ctx, p.pool, rctx.AccountPin, rctx.Session,
 		func(acc pool.Account[auth]) (*http.Response, error) {
