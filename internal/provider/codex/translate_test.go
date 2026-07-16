@@ -191,7 +191,7 @@ func TestCollectImage_FinalResult(t *testing.T) {
 		map[string]any{"type": "response.completed"},
 	)
 
-	img := collectImage(strings.NewReader(stream))
+	img, _ := collectImage(strings.NewReader(stream))
 
 	if img == nil || img.b64 != "FINALB64" {
 		t.Fatalf("img = %+v, want b64=FINALB64", img)
@@ -206,7 +206,7 @@ func TestCollectImage_PartialOnlyIfCompleted(t *testing.T) {
 	stream := sseStream(
 		map[string]any{"type": "response.image_generation_call.partial_image", "partial_image_b64": "PARTIAL"},
 	)
-	if img := collectImage(strings.NewReader(stream)); img != nil {
+	if img, _ := collectImage(strings.NewReader(stream)); img != nil {
 		t.Fatalf("expected nil for truncated stream, got %+v", img)
 	}
 }

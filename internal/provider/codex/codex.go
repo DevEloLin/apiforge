@@ -295,11 +295,17 @@ func (p *Provider) oneImage(rctx types.RequestContext, req types.ImageRequest) *
 				return upstream, nil
 			}
 			defer upstream.Body.Close()
-			img := collectImage(upstream.Body)
-			if img == nil {
-				return relay.SynthStatus(http.StatusBadGateway, "no image in stream"), nil
+			img, completed := collectImage(upstream.Body)
+			if img != nil {
+				return imageEnvelope(img), nil
 			}
-			return imageEnvelope(img), nil
+			if completed {
+				// Stream finished with no image = deterministic (refusal/empty).
+				// Return a non-retriable status so we don't re-generate on every
+				// other account (422 falls through the retry classifier).
+				return relay.SynthStatus(http.StatusUnprocessableEntity, "codex: no image (refused or empty)"), nil
+			}
+			return relay.SynthStatus(http.StatusBadGateway, "codex: image stream truncated"), nil // retriable
 		})
 	if err != nil || res == nil || res.StatusCode != http.StatusOK {
 		if res != nil {
@@ -319,10 +325,18 @@ func (p *Provider) keyImage(ctx context.Context, key string, req types.ImageRequ
 	if len(req.Images) > 0 {
 		res, err = p.keyImageEdit(ctx, key, req)
 	} else {
-		genBody, _ := json.Marshal(map[string]any{
-			"model": req.Model, "prompt": req.Prompt, "n": 1,
-			"size": req.Size, "quality": req.Quality, "output_format": req.OutputFormat,
-		})
+		// Omit empty enums — OpenAI /images/generations 400s on "" size/quality/format.
+		gen := map[string]any{"model": req.Model, "prompt": req.Prompt, "n": 1}
+		if req.Size != "" && req.Size != "auto" {
+			gen["size"] = req.Size
+		}
+		if req.Quality != "" && req.Quality != "auto" {
+			gen["quality"] = req.Quality
+		}
+		if req.OutputFormat != "" {
+			gen["output_format"] = req.OutputFormat
+		}
+		genBody, _ := json.Marshal(gen)
 		res, err = relay.Do(ctx, p.apiBase+"/images/generations", p.keyHeaders(key), genBody)
 	}
 	if err != nil {
