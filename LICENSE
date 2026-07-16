@@ -1,0 +1,57 @@
+apiforge — Personal Research & Attribution License (v1.0)
+
+Copyright (c) 2026 DevEloLin <dev.elolin@gmail.com>
+Source: https://github.com/DevEloLin/apiforge
+
+This software reuses local AI CLI / subscription logins and re-exposes them via
+OpenAI- and Anthropic-compatible APIs. It is provided for PERSONAL RESEARCH,
+LEARNING, and EVALUATION ONLY. By using, copying, modifying, or distributing it,
+you agree to all of the following terms.
+
+1. GRANT
+   You are granted a non-exclusive, worldwide, royalty-free license to use, copy,
+   modify, and distribute this software for personal, non-commercial research and
+   educational purposes, subject to the conditions in Sections 2–4.
+
+2. ATTRIBUTION (MANDATORY, NON-REMOVABLE)
+   Any use, copy, fork, modification, or distribution — in source or binary form
+   — MUST retain, visibly and WITHOUT ALTERATION:
+     (a) this LICENSE file and the NOTICE file; and
+     (b) a clear, unmodified statement of the original source: the upstream
+         repository URL (https://github.com/DevEloLin/apiforge) and the author.
+   You MUST NOT remove, hide, replace, relabel, obfuscate, or misrepresent the
+   origin of this software. Claiming authorship of this software, or stripping
+   or substituting its attribution, is expressly prohibited.
+
+3. NON-COMMERCIAL / NO RESALE
+   You may NOT sell, sublicense, rent, or offer this software — or access to any
+   service built on the subscription / CLI logins it reuses — as a paid product
+   or service, nor use it for commercial operations.
+
+4. TERMS-OF-SERVICE RISK (READ CAREFULLY)
+   This software accesses provider backends by REUSING subscription / CLI
+   credentials in ways that MAY VIOLATE the Terms of Service of OpenAI,
+   Anthropic, Google, GitHub, xAI, Cursor, Alibaba, and other vendors. Using it
+   may result in suspension, termination, or other loss of your accounts. You use
+   this software ENTIRELY AT YOUR OWN RISK and are solely responsible for
+   complying with all applicable third-party terms and all applicable laws. The
+   software ships with no credentials of any kind; you supply your own.
+
+5. NO WARRANTY / LIMITATION OF LIABILITY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, ACCOUNT LOSS, DATA LOSS, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM,
+   OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+6. TRADEMARKS / NON-AFFILIATION
+   All product names, logos, and brands (OpenAI, ChatGPT, Codex, Anthropic,
+   Claude, Google, Gemini, GitHub, Copilot, xAI, Grok, Cursor, Alibaba, Qwen,
+   etc.) are property of their respective owners and are used only for
+   interoperability and identification. This project is NOT affiliated with,
+   endorsed by, or sponsored by any of them.
+
+7. TERMINATION
+   Any breach of Sections 2 or 3 terminates this license automatically and
+   immediately.

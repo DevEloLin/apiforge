@@ -1,0 +1,18 @@
+apiforge
+Copyright (c) 2026 DevEloLin <dev.elolin@gmail.com>
+Source: https://github.com/DevEloLin/apiforge
+
+This software is licensed under the apiforge Personal Research & Attribution
+License (see LICENSE). It is provided for PERSONAL RESEARCH ONLY.
+
+ATTRIBUTION REQUIRED — DO NOT REMOVE OR REPLACE.
+Any copy, fork, modification, or distribution (source or binary) MUST retain
+this NOTICE and the LICENSE unaltered, and must clearly credit the original
+source above. Removing, hiding, or substituting this attribution is prohibited
+(LICENSE §2).
+
+WARNING: Reusing subscription / CLI logins as done by this software MAY VIOLATE
+the Terms of Service of OpenAI, Anthropic, Google, GitHub, xAI, Cursor, Alibaba
+and other vendors, and may get your accounts suspended or banned. Use entirely
+at your own risk (LICENSE §4). This project ships no credentials and is not
+affiliated with any vendor.
