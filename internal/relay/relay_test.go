@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -125,6 +126,25 @@ func TestWithAccountRetry_NoQueueWhenAccountsFailed(t *testing.T) {
 	}
 	if time.Since(start) > 1*time.Second {
 		t.Fatal("waited in queue for a non-capacity failure")
+	}
+}
+
+func TestWithAccountRetry_WrappedCancelDoesNotCoolAccount(t *testing.T) {
+	// A token-refresh failure that wraps context.Canceled (e.g. propagated via
+	// single-flight from another caller) must NOT cool the account for 5 min.
+	p := onePool(t, 1)
+	t.Setenv("QUEUE_WAIT_MS", "100")
+
+	_, err := WithAccountRetry(context.Background(), p, "", "",
+		func(pool.Account[string]) (*http.Response, error) {
+			return nil, fmt.Errorf("token refresh: %w", context.Canceled)
+		})
+	if err == nil {
+		t.Fatal("expected the cancellation error to surface")
+	}
+	st := p.Status()[0]
+	if !st.Healthy || st.CooldownMs > 0 {
+		t.Fatalf("account was cooled after a cancellation: %+v", st)
 	}
 }
 

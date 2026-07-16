@@ -4,6 +4,7 @@ package qwen
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -84,7 +85,7 @@ func (p *Provider) ChatCompletion(rctx types.RequestContext, body []byte) (*http
 		func(acc pool.Account[*creds]) (*http.Response, error) {
 			tok, err := acc.Cred.AccessToken(rctx.Ctx)
 			if err != nil {
-				return relay.SynthStatus(http.StatusUnauthorized, "qwen token refresh failed"), nil
+				return nil, fmt.Errorf("qwen token refresh: %w", err)
 			}
 			return relay.Do(rctx.Ctx, acc.Cred.BaseURL()+"/chat/completions",
 				map[string]string{"Authorization": "Bearer " + tok}, body)

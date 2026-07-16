@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -129,7 +130,13 @@ func attemptOnce[C any](
 		if ctx.Err() != nil {
 			return nil, ctx.Err(), false // client disconnected — don't blame the account
 		}
-		p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout: cool briefly
+		// A cancellation can also arrive wrapped (e.g. propagated through the
+		// single-flight token refresh from another caller). Don't cool the
+		// account for that either.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err, false
+		}
+		p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout/refresh: cool briefly, not 5 min
 		return nil, nil, true
 	}
 	switch {

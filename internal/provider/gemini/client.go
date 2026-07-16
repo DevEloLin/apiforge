@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	"apiforge/internal/relay"
 	"apiforge/internal/util/httpx"
 )
 
@@ -83,7 +83,7 @@ func discoverProject(ctx context.Context, c *creds, log *slog.Logger) string {
 func geminiGenerate(ctx context.Context, c *creds, model, project string, request any, stream bool) (*http.Response, error) {
 	tok, err := c.AccessToken(ctx)
 	if err != nil {
-		return relay.SynthStatus(http.StatusUnauthorized, "gemini token refresh failed"), nil
+		return nil, fmt.Errorf("gemini token refresh: %w", err)
 	}
 	verb := "generateContent"
 	if stream {
