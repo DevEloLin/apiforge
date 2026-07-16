@@ -35,7 +35,8 @@ internal/
 - [x] **P4 claude + gemini** — claude: OAuth self-refresh + API-key; OpenAI↔Anthropic translation (stream+aggregate) + native /messages & count_tokens passthrough + Claude-Code identity injection. gemini-cli (EXPERIMENTAL, `GEMINI_OAUTH_ENABLED`): Google OAuth + Code Assist + OpenAI↔Gemini translation
 - [x] **P5 qwen + copilot** — qwen-cli: OAuth self-refresh + per-account base URL from resource_url. copilot: GitHub token→Copilot token exchange (single-flight), live /models with copilot/ prefix, editor fingerprint headers
 - [x] **P6 cursor** (EXPERIMENTAL) — reverse-engineered AiService: hand-rolled protobuf + Connect-RPC framing (gzip) + Jyh checksum cipher; OpenAI chat (stream + aggregate). Token via `CURSOR_ACCESS_TOKEN(S)` — no SQLite engine dependency (a headless host has no `state.vscdb`; extract the token once from a desktop Cursor: `sqlite3 state.vscdb "select value from ItemTable where key='cursorAuth/accessToken'"`)
-- [ ] P7 parity diff vs TS · Dockerfile (scratch) · deploy to Pi + measure RAM
+- [x] **P7a parity + Dockerfile** — full route/provider/feature parity (see PARITY.md); admin account API wired; constant-time admin auth; scratch Dockerfile, static arm64 binary 6.8MB
+- [ ] P7b deploy to Pi + measure RAM (needs Pi + copied logins)
 
 ## Run
 ```

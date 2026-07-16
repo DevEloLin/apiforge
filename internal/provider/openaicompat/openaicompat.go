@@ -79,6 +79,7 @@ func (p *Provider) Capabilities() []types.Capability { return nil }
 func (p *Provider) IsReady() bool                    { return p.ready }
 func (p *Provider) ListModels() []types.ModelObject  { return types.ModelObjects(p.models, p.ownedBy) }
 func (p *Provider) Pool() *pool.Pool[string]         { return p.pool }
+func (p *Provider) AccountPool() pool.Admin          { return p.pool }
 
 func (p *Provider) OwnsModel(model string) bool {
 	for _, m := range p.models {
