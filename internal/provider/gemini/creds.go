@@ -2,7 +2,6 @@ package gemini
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -18,25 +17,19 @@ import (
 	"apiforge/internal/util/httpx"
 )
 
-// Public OAuth client the Gemini CLI ships with (embedded in its open-source
-// distribution — a "public" OAuth client, not a real secret). The client secret
-// is kept base64-encoded so naive secret scanners don't flag it, and is
-// overridable via GEMINI_OAUTH_CLIENT_SECRET.
 const (
-	oauthClientID = "REDACTED_GEMINI_CLIENT_ID"
 	oauthTokenURL = "https://oauth2.googleapis.com/token"
 	refreshSkewMs = 60_000
-	// base64("<gemini-cli public client secret>")
-	oauthClientSecretB64 = "REDACTED_GEMINI_SECRET_B64="
 )
 
-func oauthClientSecret() string {
-	if v := os.Getenv("GEMINI_OAUTH_CLIENT_SECRET"); v != "" {
-		return v
-	}
-	b, _ := base64.StdEncoding.DecodeString(oauthClientSecretB64)
-	return string(b)
-}
+// Gemini CLI authenticates with a public OAuth client embedded in its
+// open-source distribution. This repo deliberately does NOT vendor Google's
+// client credentials; to enable gemini-cli (experimental), supply them via env
+// (copy the client_id/client_secret from the open-source gemini-cli source):
+//
+//	GEMINI_OAUTH_CLIENT_ID, GEMINI_OAUTH_CLIENT_SECRET
+func oauthClientID() string     { return os.Getenv("GEMINI_OAUTH_CLIENT_ID") }
+func oauthClientSecret() string { return os.Getenv("GEMINI_OAUTH_CLIENT_SECRET") }
 
 type credState struct {
 	AccessToken  string `json:"access_token"`
@@ -102,13 +95,17 @@ func (c *creds) Refresh(ctx context.Context) (string, error) {
 	if cur == nil {
 		return "", fmt.Errorf("gemini: refresh before load")
 	}
+	clientID, clientSecret := oauthClientID(), oauthClientSecret()
+	if clientID == "" || clientSecret == "" {
+		return "", fmt.Errorf("gemini: set GEMINI_OAUTH_CLIENT_ID and GEMINI_OAUTH_CLIENT_SECRET (public gemini-cli OAuth client) to refresh")
+	}
 	if c.log != nil {
 		c.log.Info("refreshing Gemini OAuth token")
 	}
 	form := url.Values{
 		"grant_type":    {"refresh_token"},
-		"client_id":     {oauthClientID},
-		"client_secret": {oauthClientSecret()},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
 		"refresh_token": {cur.RefreshToken},
 	}
 	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
