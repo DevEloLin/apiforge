@@ -1,0 +1,26 @@
+name: Feature request / 功能建议
+description: Suggest an idea / 提出一个想法
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 要解决的问题
+      description: What are you trying to do? / 你想做什么？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution / 建议方案
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / 备选方案
+  - type: markdown
+    attributes:
+      value: |
+        Note: this is a lean, personal-research project (stdlib-only, ~7MB image).
+        请注意：本项目追求精简（仅标准库、约 7MB 镜像），仅供个人研究。

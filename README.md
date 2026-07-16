@@ -1,333 +1,301 @@
-# apiforge
+**English** | [中文](./README.zh-CN.md)
 
-**把你本机各家 AI CLI / 订阅登录，聚合成一个统一的 OpenAI / Anthropic 兼容 API 网关。**
-单文件 Go 二进制，无前端、无数据库，静态镜像约 7MB，可跑在 1GB 树莓派上。
+<h1 align="center">apiforge</h1>
 
-> 📖 **完整手册**：[使用手册 USAGE.md](./docs/USAGE.md)（客户端调用） ·
-> [操作手册 OPERATIONS.md](./docs/OPERATIONS.md)（安装/配置/Docker 打包与部署/运维）
+<p align="center">
+  <b>One OpenAI- and Anthropic-compatible API gateway for all your local AI CLI &amp; subscription logins.</b><br/>
+  Single static Go binary · no frontend · no database · ~7&nbsp;MB image · runs on a 1&nbsp;GB Raspberry Pi.
+</p>
 
-> English TL;DR: apiforge is a lean, single-binary Go gateway that **reuses your
-> local AI CLI / subscription logins** (Codex/Claude/Copilot/Gemini/Qwen/Cursor/Grok)
-> and re-exposes them behind one OpenAI- and Anthropic-compatible API. It also
-> relays plain API keys for 20+ vendors. **For personal research only. Reusing
-> subscription logins this way may violate those vendors' Terms of Service — see
-> the disclaimer below.**
+<p align="center">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white">
+  <img alt="Docker image" src="https://img.shields.io/badge/image-~7MB%20(scratch)-2496ED?logo=docker&logoColor=white">
+  <img alt="Arch" src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-lightgrey">
+  <img alt="License" src="https://img.shields.io/badge/license-Personal%20Research%20%2B%20Attribution-orange">
+  <img alt="Status" src="https://img.shields.io/badge/use-personal%20research%20only-red">
+</p>
 
----
-
-## ⚠️ 重要提醒（务必先读）
-
-使用本项目前，请务必仔细阅读以下内容：
-
-- 🚨 **服务条款风险**：使用本项目可能违反 Anthropic、OpenAI、Google、GitHub、xAI、
-  Cursor、阿里等上游服务商的服务条款。请在使用前仔细阅读相关服务商的用户协议，由此
-  产生的一切风险由用户自行承担。
-- ⚖️ **合规使用**：请在符合您所在国家或地区法律法规的前提下使用本项目，严禁将其用于
-  任何违法违规用途。
-- 📖 **免责声明**：本项目仅供技术学习与研究使用，作者不对因使用本项目导致的账户封禁、
-  服务中断、数据丢失或其他任何直接或间接损失承担责任。
-- 🚫 **无商业授权**：本项目从未授权任何个人或组织基于本项目开展任何形式的商业化运营。
-  任何以本项目名义或基于本项目从事的商业行为均与本项目及其开发者无关，由此产生的一切
-  纠纷、损失和法律责任由行为主体自行承担。
-
-补充说明：
-
-- 本项目**不含、不分发**任何厂商的账号、密钥或订阅；一切凭据由使用者自备（用你自己
-  已登录的本机 CLI）。
-- 逆向部分（Cursor / Grok 网页协议等）基于公开的第三方研究实现，标注为
-  **实验性（EXPERIMENTAL）**，随厂商改动随时可能失效。
-
-> 开源许可与**来源署名不可移除**的要求见文末「许可与署名」及 [LICENSE](./LICENSE)。
+<p align="center">
+  📖 <a href="./docs/USAGE.md">Usage</a> ·
+  🛠️ <a href="./docs/OPERATIONS.md">Operations</a> ·
+  🧩 <a href="./docs/ARCHITECTURE.md">Architecture</a> ·
+  📚 <a href="./docs/">All docs</a> ·
+  🇨🇳 <a href="./README.zh-CN.md">中文文档</a>
+</p>
 
 ---
 
-## 目录
-- [它解决什么问题](#它解决什么问题)
-- [支持哪些订阅 / 来源](#支持哪些订阅--来源)
-- [快速开始](#快速开始)
-- [各来源怎么准备登录](#各来源怎么准备登录)
-- [配置项（环境变量）](#配置项环境变量)
-- [使用示例](#使用示例)
-- [账户池 / 并发 / 排队](#账户池--并发--排队)
-- [管理 API](#管理-api)
-- [安全设计](#安全设计)
-- [部署到树莓派](#部署到树莓派)
-- [许可与署名](#许可与署名)
-- [来源与致谢](#来源与致谢)
+**apiforge** reads the login credentials of the AI CLIs you already use — Codex/ChatGPT,
+Claude Code, GitHub Copilot, Gemini CLI, Qwen Code, Cursor, Grok — auto-refreshes their
+OAuth tokens over HTTP, and re-exposes all of them behind **one standard OpenAI/Anthropic
+API**. Any OpenAI- or Anthropic-compatible client can then talk to a single endpoint. It
+also relays plain API keys for 20+ vendors and your own custom relays.
 
----
+## ⚠️ Important notice — read first
 
-## 它解决什么问题
+Please read the following carefully before using this project:
 
-你在本机登录了 Codex / Claude Code / Copilot / Gemini CLI 等订阅工具。apiforge 读取
-它们的本地登录凭据（并在需要时自动刷新 OAuth token），把这些订阅**统一暴露成一套标准
-API**，于是任何支持 OpenAI / Anthropic 协议的客户端都能直接调用：
+- 🚨 **Terms-of-service risk.** Using this project may violate the Terms of Service of
+  Anthropic, OpenAI, Google, GitHub, xAI, Cursor, Alibaba and other upstream providers.
+  Read each provider's user agreement first; **all resulting risk is borne by the user.**
+- ⚖️ **Lawful use.** Use this project only in compliance with the laws and regulations of
+  your country/region. Any illegal or non-compliant use is strictly prohibited.
+- 📖 **Disclaimer.** This project is for technical learning and research ONLY. The author is
+  not liable for any account bans, service interruptions, data loss, or any other direct or
+  indirect damages arising from its use.
+- 🚫 **No commercial authorization.** This project has never authorized any individual or
+  organization to run any form of commercial operation based on it. Any commercial activity
+  conducted in the name of, or based on, this project is unrelated to this project and its
+  developer; all disputes, losses, and legal liability are borne solely by the actor.
+
+Additional notes: this project **ships and distributes no** vendor accounts, keys, or
+subscriptions — you supply your own (your already-logged-in local CLIs). Reverse-engineered
+parts (Cursor / Grok web protocols, etc.) are based on public third-party research, marked
+**EXPERIMENTAL**, and may break whenever a vendor changes its API.
+
+> Open-source terms and the **non-removable attribution** requirement are in
+> [License &amp; attribution](#license--attribution) and [LICENSE](./LICENSE).
+
+## Table of contents
+- [Why apiforge](#why-apiforge)
+- [Supported subscriptions &amp; sources](#supported-subscriptions--sources)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Concurrency &amp; queueing](#concurrency--queueing)
+- [Admin API](#admin-api)
+- [Security](#security)
+- [Deploy](#deploy)
+- [FAQ](#faq)
+- [License &amp; attribution](#license--attribution)
+- [Acknowledgements](#acknowledgements)
+
+## Why apiforge
+
+You are logged into subscription tools (Codex / Claude Code / Copilot / Gemini CLI …) on your
+machine. apiforge reuses those local logins and **unifies them behind one standard API**:
 
 ```
-你的客户端 / new-api / 脚本
-        │  OpenAI / Anthropic 兼容协议 (sk-...)
+  your client / new-api / scripts
+        │  OpenAI / Anthropic protocol (sk-...)
         ▼
-   ┌─────────────┐   复用本机登录 + 自刷新 token
-   │  apiforge   │──────────────────────────────►  各厂商后端
-   └─────────────┘   账户池 · 自动切换 · 并发帽 · 排队
+   ┌─────────────┐   reuse local logins + auto-refresh tokens
+   │  apiforge   │──────────────────────────────►  vendor backends
+   └─────────────┘   account pool · auto-switch · concurrency cap · queueing
 ```
 
-- **对外协议统一**：`/v1/chat/completions`、`/v1/responses`、`/v1/messages`、
-  `/v1/messages/count_tokens`、`/v1/images/generations`、`/v1/images/edits`、`/v1/models`。
-- **多账户池**：同一来源可放多个账户，自动轮询 + 失败冷却切换 + 手动指定。
-- **不跑 CLI 进程**：只读凭据文件并用 HTTP 自刷新 token，内存占用极低。
+- **Unified surface:** `/v1/chat/completions`, `/v1/responses`, `/v1/messages`,
+  `/v1/messages/count_tokens`, `/v1/images/generations`, `/v1/images/edits`, `/v1/models`.
+- **Multi-account pool:** round-robin + cooldown-on-failure switching + manual pinning.
+- **No CLI subprocesses:** it only reads credential files and refreshes tokens over HTTP —
+  tiny memory footprint.
 
----
+## Supported subscriptions & sources
 
-## 支持哪些订阅 / 来源
+### A. Subscription / CLI login reuse (core feature)
 
-### A. 订阅 / CLI 登录复用（核心能力）
-
-| 来源 | provider id | 复用方式 | 能力 | 状态 |
+| Source | provider id | How it's reused | Capabilities | Status |
 |---|---|---|---|---|
-| **ChatGPT / Codex 订阅** | `codex` | Codex CLI OAuth（`~/.codex/auth.json`）自刷新 | chat · responses · 文生图 · 图生图 | ✅ 实测 |
-| **Claude（Claude Code 订阅）** | `claude` | Claude Code OAuth（`~/.claude/.credentials.json`）自刷新 | chat（OpenAI↔Anthropic 翻译）· 原生 `/v1/messages` · count_tokens | ✅ 已实现 |
-| **GitHub Copilot 订阅** | `copilot` | GitHub OAuth token → 交换 Copilot token | chat（自动发现全部可用模型） | ✅ 实测 |
-| **Grok（grok.com 订阅）** | `grok-web` | 复用 `sso` 会话 cookie | chat（流式 / 非流） | 🧪 实验 |
-| **Cursor 订阅** | `cursor` | 会话 token（Connect-RPC / protobuf） | chat | 🧪 实验 |
-| **Gemini（Google 账号）** | `gemini-cli` | Gemini CLI OAuth（Code Assist） | chat | 🧪 实验（默认关，`GEMINI_OAUTH_ENABLED=1` 开启） |
-| **Qwen Code** | `qwen-cli` | Qwen Code CLI OAuth 自刷新 | chat | ✅ 已实现 |
+| **ChatGPT / Codex subscription** | `codex` | Codex CLI OAuth (`~/.codex/auth.json`), auto-refresh | chat · responses · image gen · image edit | ✅ tested |
+| **Claude (Claude Code subscription)** | `claude` | Claude Code OAuth (`~/.claude/.credentials.json`), auto-refresh | chat (OpenAI↔Anthropic) · native `/v1/messages` · count_tokens | ✅ implemented |
+| **GitHub Copilot subscription** | `copilot` | GitHub OAuth token → Copilot token exchange | chat (auto-discovers all available models) | ✅ tested |
+| **Grok (grok.com subscription)** | `grok-web` | reuse the `sso` session cookie | chat (stream / non-stream) | 🧪 experimental |
+| **Cursor subscription** | `cursor` | session token (Connect-RPC / protobuf) | chat | 🧪 experimental |
+| **Gemini (Google account)** | `gemini-cli` | Gemini CLI OAuth (Code Assist) | chat | 🧪 experimental (off by default, `GEMINI_OAUTH_ENABLED=1`) |
+| **Qwen Code** | `qwen-cli` | Qwen Code CLI OAuth, auto-refresh | chat | ✅ implemented |
 
-### B. 官方 / 兼容 API Key 直连（供 key 即启用）
+### B. Official / compatible API-key relays (enabled when you supply a key)
 
-- **OpenAI**（`OPENAI_API_KEYS`，走 codex 的 key 模式）、**Anthropic**（`ANTHROPIC_API_KEYS`）。
-- **20+ OpenAI 兼容厂商**（配对应 `*_API_KEYS` 即启用）：DeepSeek、Kimi(Moonshot)、
-  智谱 GLM、通义千问、文心一言、商汤、昆仑天工、360、MiniMax、豆包、混元、讯飞星火、
-  阶跃、零一万物、百川、SiliconFlow、Gemini(key)、AWS Bedrock、OpenRouter、
-  **xAI Grok（`XAI_API_KEYS`，官方 key）**、Agnes。
-- **自定义中转站**：`CUSTOM_PROVIDERS`（内联 JSON）/ `CUSTOM_PROVIDERS_FILE`，
-  可复用第三方 CLI 的 token 文件（`keyFile`）。
+- **OpenAI** (`OPENAI_API_KEYS`), **Anthropic** (`ANTHROPIC_API_KEYS`).
+- **20+ OpenAI-compatible vendors** (set the matching `*_API_KEYS`): DeepSeek, Kimi (Moonshot),
+  Zhipu GLM, Qwen, ERNIE (Baidu), SenseTime, Skywork, 360, MiniMax, Doubao, Hunyuan, Spark,
+  StepFun, Yi (01.AI), Baichuan, SiliconFlow, Gemini (key), AWS Bedrock, OpenRouter,
+  **xAI Grok (`XAI_API_KEYS`, official key)**, Agnes.
+- **Custom relays:** `CUSTOM_PROVIDERS` (inline JSON) / `CUSTOM_PROVIDERS_FILE`, and you can
+  reuse a third-party CLI's token file via `keyFile`.
 
-> 说明：`grok-web`（订阅复用）与 `grok`（官方 API key）可并存——前者复用 grok.com
-> 订阅，模型名带 `grok-web/` 前缀；后者用 x.ai 官方 key。
+> `grok-web` (subscription reuse) and `grok` (official API key) can coexist — the former
+> reuses your grok.com subscription (models prefixed `grok-web/`), the latter uses an x.ai key.
 
----
+## Quick start
 
-## 快速开始
-
-### 方式一：源码运行（需 Go 1.26+）
+### Option 1 — from source (Go 1.26+)
 
 ```bash
 git clone https://github.com/DevEloLin/apiforge.git
 cd apiforge
-
-# 最简：本机回环 + 一个访问密钥，自动探测已登录的 CLI
 API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 ```
 
-### 方式二：Docker（scratch 镜像，约 7MB）
+### Option 2 — Docker (scratch image, ~7 MB)
 
 ```bash
 docker build -t apiforge .
 docker run --rm -p 127.0.0.1:8899:8899 \
   -e API_KEYS=sk-my-secret \
-  -v $HOME/.codex:/root/.codex:ro \
-  -v $HOME/.claude:/root/.claude:ro \
+  -e CODEX_AUTHS=/creds/codex/auth.json \
+  -v "$HOME/.codex:/creds/codex" \
   apiforge
 ```
 
-> 容器内默认 `HOST=0.0.0.0`，请只发布到 `127.0.0.1`（如上），前面再挂 new-api /
-> Cloudflare Tunnel 做多用户与鉴权。
+> The container defaults to `HOST=0.0.0.0`; publish it only to `127.0.0.1` and put new-api /
+> Cloudflare Tunnel in front for multi-user access and auth. Full Docker guide (credential
+> mounting, read/write, compose, arm64 builds): [OPERATIONS.md](./docs/OPERATIONS.md).
 
-启动后验证：
+Verify:
 
 ```bash
-curl -s http://127.0.0.1:8899/health | jq        # 就绪的 provider 列表
+curl -s http://127.0.0.1:8899/health | jq                              # ready providers
 curl -s -H "Authorization: Bearer sk-my-secret" \
-     http://127.0.0.1:8899/v1/models | jq         # 聚合模型列表
+     http://127.0.0.1:8899/v1/models | jq '.data[].id'                 # aggregated models
 ```
 
----
+## Configuration
 
-## 各来源怎么准备登录
+Everything is configured via **environment variables** (the same image can be reconfigured at
+`docker run` time). Most-used ones:
 
-apiforge **不做登录**，只复用你已经登录好的本机凭据。准备方式：
-
-- **Codex**：`codex login`（或把 `auth.json` 拷到 `~/.codex/`）。多账户用
-  `CODEX_AUTHS=/path/a/auth.json,/path/b/auth.json`。
-- **Claude**：`claude`（Claude Code）登录一次，凭据在 `~/.claude/.credentials.json`。
-- **Copilot**：在 VS Code 里登录 GitHub Copilot；apiforge 从
-  `~/.config/github-copilot/{apps,hosts}.json` 发现 token，或用 `COPILOT_GITHUB_TOKENS`。
-- **Qwen Code**：`qwen` 登录，凭据在 `~/.qwen/oauth_creds.json`。
-- **Gemini CLI**：`gemini` 登录；设 `GEMINI_OAUTH_ENABLED=1` 启用（实验）。本仓库
-  **不内置** Google OAuth client，需额外提供 `GEMINI_OAUTH_CLIENT_ID` 与
-  `GEMINI_OAUTH_CLIENT_SECRET`（取自开源 gemini-cli 内置的公开 client）。
-- **Grok（订阅）**：浏览器登录 grok.com，从开发者工具复制 `sso` cookie 值，设
-  `GROK_COOKIES=<sso值>`。若被 Cloudflare 拦（403），改传完整 cookie 串（含
-  `cf_clearance`）：`GROK_COOKIES="sso=xxx; cf_clearance=yyy"`。多账户逗号分隔。
-- **Cursor（订阅）**：从桌面版 Cursor 的 `state.vscdb` 取出会话 token（无头机没有该
-  文件，所以用环境变量传）：
-  `sqlite3 state.vscdb "select value from ItemTable where key='cursorAuth/accessToken'"`，
-  然后设 `CURSOR_ACCESS_TOKEN=<token>`。
-
-> 凭据可以是 `user_<ULID>::<JWT>` 形式或裸 JWT，apiforge 会自动处理。
-
----
-
-## 配置项（环境变量）
-
-| 变量 | 默认 | 说明 |
+| Var | Default | Meaning |
 |---|---|---|
-| `API_KEYS` | 空 | 客户端访问密钥（逗号分隔）。为空且非回环绑定时**拒绝启动**（fail-closed） |
-| `HOST` / `PORT` | `127.0.0.1` / `8899` | 监听地址 |
-| `ADMIN_TOKEN` | 空 | 管理 API 令牌；为空则 `/admin/*` 全关 |
-| `MAX_ACCOUNT_CONCURRENCY` | `3` | **每账户**并发上限；`0` = 不限 |
-| `QUEUE_WAIT_MS` | `60000` | 账户全忙时请求排队等空位的最长时间（而非直接失败） |
-| `STICKY_TTL_SECONDS` | `0` | 会话粘滞（`x-apiforge-session` 头映射同一账户）；`0` 关闭 |
-| `RATE_LIMIT_RPM` | `0` | 每密钥每分钟请求上限；`0` 关闭 |
-| `MAX_BODY_BYTES` | `10485760` | 请求体上限；`0` 不限 |
-| `<PROVIDER>_AUTHS` / `_AUTH` | 自动探测 | 指定凭据文件路径（如 `CODEX_AUTHS`、`CLAUDE_AUTHS`） |
-| `<PROVIDER>_ENABLED` | `true` | 关闭某来源（如 `CURSOR_ENABLED=false`） |
-| `OPENAI_API_KEYS` / `ANTHROPIC_API_KEYS` | 空 | 官方 key（与 CLI 账户混池） |
-| `<VENDOR>_API_KEYS` | 空 | 各厂商 key（`DEEPSEEK_API_KEYS`、`XAI_API_KEYS` …） |
-| `GROK_COOKIES` | 空 | grok.com 订阅 cookie（多账户逗号分隔）🧪 |
-| `CURSOR_ACCESS_TOKEN(S)` | 空 | Cursor 会话 token 🧪 |
-| `GEMINI_OAUTH_ENABLED` | `false` | 开启 gemini-cli 🧪 |
-| `GEMINI_OAUTH_CLIENT_ID` / `_SECRET` | 空 | gemini-cli 的公开 OAuth client（本仓库不内置，需自备）🧪 |
-| `CUSTOM_PROVIDERS` / `_FILE` | 空 | 自定义中转站（内联 JSON / 文件） |
-| `ALLOW_UNAUTHENTICATED` | `false` | 允许无密钥非回环启动（危险，仅调试） |
+| `API_KEYS` | empty | client access keys (comma-separated); empty + non-loopback bind → **refuses to start** |
+| `HOST` / `PORT` | `127.0.0.1` / `8899` | listen address |
+| `ADMIN_TOKEN` | empty | guards `/admin/*`; empty disables admin |
+| `MAX_ACCOUNT_CONCURRENCY` | `3` | per-account concurrency cap (`0` = unlimited) |
+| `QUEUE_WAIT_MS` | `60000` | max time a request queues for a free slot when all accounts are busy |
+| `STICKY_TTL_SECONDS` | `0` | session affinity (`x-apiforge-session`); `0` = off |
+| `RATE_LIMIT_RPM` | `0` | per-key requests/min; `0` = off |
+| `<PROVIDER>_AUTHS` / `_AUTH` | auto-detect | explicit credential file path(s) |
+| `OPENAI_API_KEYS` / `ANTHROPIC_API_KEYS` / `<VENDOR>_API_KEYS` | empty | API keys (mixed into pools) |
+| `GROK_COOKIES` 🧪 / `CURSOR_ACCESS_TOKEN(S)` 🧪 | empty | subscription session credentials |
+| `GEMINI_OAUTH_ENABLED` 🧪 / `GEMINI_OAUTH_CLIENT_ID` / `_SECRET` | off / empty | enable gemini-cli (public client not vendored here) |
 
-完整示例见 [.env.example](./.env.example)。
+Full reference and `.env` sample: [OPERATIONS.md § Configuration](./docs/OPERATIONS.md) and
+[.env.example](./.env.example).
 
----
+## Usage
 
-## 使用示例
-
-Chat（自动按模型名路由到对应来源）：
+Routing is by the request's `model` field. Note the required prefixes `copilot/`, `grok-web/`,
+`cursor/`. Full examples (streaming, tools, images, SDKs): [USAGE.md](./docs/USAGE.md).
 
 ```bash
+# Chat (OpenAI protocol) — routed to codex by model name
 curl http://127.0.0.1:8899/v1/chat/completions \
   -H "Authorization: Bearer sk-my-secret" -H "Content-Type: application/json" \
-  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"你好"}]}'
-```
+  -d '{"model":"gpt-5.4-mini","messages":[{"role":"user","content":"hi"}]}'
 
-流式：加 `"stream": true`。Claude 原生协议：
-
-```bash
+# Claude, native Anthropic protocol
 curl http://127.0.0.1:8899/v1/messages \
   -H "Authorization: Bearer sk-my-secret" -H "Content-Type: application/json" \
   -d '{"model":"claude-sonnet-5","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}'
-```
 
-Codex 文生图：
-
-```bash
-curl http://127.0.0.1:8899/v1/images/generations \
-  -H "Authorization: Bearer sk-my-secret" -H "Content-Type: application/json" \
-  -d '{"model":"gpt-image-2","prompt":"a red bicycle","n":1,"size":"1024x1024"}'
-```
-
-Grok 订阅（注意 `grok-web/` 前缀）：
-
-```bash
+# Grok subscription (note the grok-web/ prefix)
 curl http://127.0.0.1:8899/v1/chat/completions \
   -H "Authorization: Bearer sk-my-secret" -H "Content-Type: application/json" \
   -d '{"model":"grok-web/grok-4.2","messages":[{"role":"user","content":"hi"}]}'
 ```
 
----
+Point any OpenAI SDK at `http://127.0.0.1:8899/v1` with your `API_KEYS` value as the key.
 
-## 账户池 / 并发 / 排队
+## Concurrency & queueing
 
-- **每账户并发帽**（`MAX_ACCOUNT_CONCURRENCY`，默认 3）保护订阅账户不被瞬时打爆、降低封号风险。
-- **排队**：当某来源所有健康账户都打满并发帽时，新请求会**排队等待空位**（最多
-  `QUEUE_WAIT_MS`），而不是立刻失败；账户释放槽位即被唤醒。
-- **自动切换**：429 冷却 60s，鉴权失败冷却 5 分钟，期间自动切到其他账户。
-- **流式**会一直占用槽位直到流结束（避免提前释放导致超发）。
+- A **per-account cap** (`MAX_ACCOUNT_CONCURRENCY`, default 3) protects subscription accounts
+  from bursts and lowers ban risk.
+- When all healthy accounts of a source are at their cap, new requests **queue** for a freed
+  slot (up to `QUEUE_WAIT_MS`) instead of failing immediately.
+- **Auto-switch:** 429 → 60 s cooldown, auth failure → 5 min cooldown, switching to other
+  accounts meanwhile. A streamed response holds its slot until the stream closes.
 
-举例：2 个账户 × 帽 3 = 同时 6 路在途；20 个用户并发时，6 个立即处理、其余排队轮流，
-**以排队延迟换取零失败**（实测 10 并发 × 2 账户帽 1 → 10/10 成功）。
+Example: 2 accounts × cap 3 = 6 in flight; a burst of 20 users runs 6 at a time and the rest
+queue — trading queue latency for zero failures.
 
----
+## Admin API
 
-## 管理 API
+With `ADMIN_TOKEN` set (`Authorization: Bearer <ADMIN_TOKEN>`):
 
-设了 `ADMIN_TOKEN` 后可用（`Authorization: Bearer <ADMIN_TOKEN>`）：
-
-| 方法 | 路径 | 作用 |
+| Method | Path | Purpose |
 |---|---|---|
-| GET | `/admin/providers` | 列出就绪 provider 与模型 |
-| GET | `/admin/accounts` | 各来源账户健康快照（在途数 / 冷却 / 禁用） |
-| POST | `/admin/accounts/preferred` | 手动指定优先账户（`{"provider":"codex","account":"codex#1"}`；account 传空清除） |
-| POST | `/admin/accounts/enabled` | 启用/禁用某账户（`{"provider":"codex","account":"codex#1","enabled":false}`） |
+| GET | `/admin/providers` | ready providers and their models |
+| GET | `/admin/accounts` | per-account health (in-flight / cooldown / disabled) |
+| POST | `/admin/accounts/preferred` | pin a preferred account (empty `account` clears) |
+| POST | `/admin/accounts/enabled` | enable/disable an account |
 
-也可用请求头 `x-apiforge-account: codex#2` 对**单次请求**指定账户，`x-apiforge-session:
-<id>` 做会话粘滞。
+Per-request headers: `x-apiforge-account: codex#2` (pin) and `x-apiforge-session: <id>`
+(sticky). See [USAGE.md](./docs/USAGE.md).
 
----
+## Security
 
-## 安全设计
+- **Fail-closed:** refuses to start with no `API_KEYS` on a non-loopback bind (unless
+  `ALLOW_UNAUTHENTICATED=1`).
+- **SSRF guard** on all custom base URLs (rejects loopback / private / link-local).
+- **Secret & path redaction** in logs and `/health`.
+- **Outbound spoofing:** never forwards inbound headers; sends only each CLI's genuine
+  fingerprint headers.
+- **keyFile path-traversal guard**; **constant-time admin-token comparison**.
 
-- **fail-closed**：无 `API_KEYS` 且绑定非回环时拒绝启动（除非显式 `ALLOW_UNAUTHENTICATED=1`）。
-- **SSRF 防护**：所有自定义 baseURL 拒绝回环 / 内网 / 链路本地地址。
-- **凭据脱敏**：日志与 `/health` 诊断中屏蔽 token 与绝对路径。
-- **出站拟真**：绝不转发入站头（客户端 UA/密钥），只发各 CLI 的真实指纹头。
-- **keyFile 防穿越**：自定义 `keyFile` 必须在允许根目录内。
-- **管理令牌常数时间比较**，防时序侧信道。
+## Deploy
 
----
+- Cross-compile a static binary:
+  `CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o apiforge ./cmd/apiforge` (~6.8 MB).
+- Or `docker build` (scratch image, `GOMEMLIMIT=64MiB`).
+- Recommended: bind loopback, front with new-api (multi-user/billing) + Cloudflare Tunnel.
 
-## 部署到树莓派
+Full guide — Docker packaging (3 ways), Docker configuration, docker-compose, systemd,
+Raspberry Pi, reverse proxy, health checks, troubleshooting: [OPERATIONS.md](./docs/OPERATIONS.md).
 
-- 交叉编译静态二进制：`CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o apiforge ./cmd/apiforge`（约 6.8MB）。
-- 或在派上 `docker build`（scratch 镜像，`GOMEMLIMIT=64MiB`）。
-- 建议只监听回环，前置 new-api（多用户/计费）+ Cloudflare Tunnel。
+## FAQ
 
----
+**What is apiforge?** A self-hosted AI API gateway / reverse proxy written in Go that unifies
+your local AI CLI & subscription logins (ChatGPT/Codex, Claude, Copilot, Gemini, Qwen, Cursor,
+Grok) behind one OpenAI/Anthropic-compatible API — single binary, no frontend, no database,
+runs on a Raspberry Pi.
 
-## 常见问题 FAQ
+**How is it different from one-api / new-api / sub2api?** one-api / new-api focus on
+multi-tenant distribution & billing of API keys; sub2api is a heavier Go+Vue+PostgreSQL+Redis
+platform. apiforge is leaner: single binary, no database, focused on **reusing local
+subscription / CLI logins** as a standard API — great for personal use or behind new-api.
 
-**apiforge 是什么？**
-apiforge 是一个用 Go 写的**自托管 AI API 网关 / 反向代理**，把你本机各家 AI CLI 与
-订阅登录（ChatGPT/Codex、Claude、GitHub Copilot、Gemini、Qwen、Cursor、Grok）聚合成
-**一套 OpenAI / Anthropic 兼容 API**，单文件二进制、无前端、无数据库，可跑在树莓派上。
+**Does it support streaming?** Yes — SSE streaming and non-stream aggregation on all chat endpoints.
 
-**它和 one-api / new-api / sub2api 有什么区别？**
-one-api / new-api 主要面向 API Key 的多租户分发与计费；sub2api 是较重的
-Go+Vue+PostgreSQL+Redis 多租户平台。apiforge 更轻：单文件、无数据库、专注“**复用本机
-订阅 / CLI 登录**并统一成标准 API”，适合个人自用或前置到 new-api 后面。
+**Can I get banned? How do I reduce the risk?** Yes, there is risk — reusing subscription logins
+may violate provider ToS (see the notice above). Reduce it with per-account concurrency caps,
+few accounts, and by not exposing it as a public high-traffic service; it cannot be eliminated.
 
-**支持哪些模型和订阅？**
-见上文[支持哪些订阅 / 来源](#支持哪些订阅--来源)：订阅复用（Codex/Claude/Copilot/
-Gemini/Qwen/Cursor/Grok）+ 20+ 家 OpenAI 兼容厂商 API Key（DeepSeek/Kimi/GLM/通义/
-xAI Grok…）+ 自定义中转站。
+**Can I use it commercially / resell it?** No. Personal research only, and **no commercial
+operation is ever authorized** (see [License & attribution](#license--attribution)).
 
-**支持流式（stream）吗？** 支持。所有 chat 端点支持 SSE 流式与非流式聚合。
+**Does it run on a Raspberry Pi / low-memory box?** Yes — ~6.8 MB static binary, ~7 MB scratch
+image, `GOMEMLIMIT` default 64 MiB.
 
-**会被封号吗？如何降低风险？**
-有风险——复用订阅登录可能违反厂商服务条款（见文首声明）。可通过**每账户并发帽**
-（`MAX_ACCOUNT_CONCURRENCY`）、少量账户、避免高频对外提供服务来降低风险；但无法消除。
+**Do I need to keep the CLIs running?** No — apiforge only reads the credential files and
+refreshes OAuth tokens over HTTP; it never spawns CLI subprocesses.
 
-**可以商用或转卖吗？** 不可以。本项目仅供个人研究，且**从未授权任何商业化运营**
-（见[许可与署名](#许可与署名)与 [LICENSE](./LICENSE)）。
+## Documentation
 
-**能跑在树莓派 / 低内存机器上吗？** 可以。静态二进制约 6.8MB，scratch 镜像约 7MB，
-`GOMEMLIMIT` 默认 64MiB，适合 1GB 树莓派。
+- 📖 [Usage Guide](./docs/USAGE.md) — client API, endpoints, examples, SDKs
+- 🛠️ [Operations Manual](./docs/OPERATIONS.md) — install, configure, Docker, deploy, troubleshoot
+- 🧩 [Architecture](./docs/ARCHITECTURE.md) — design overview for contributors
+- 🔁 [Parity](./docs/PARITY.md) — feature parity vs the TypeScript original
+- 🤝 [Contributing](./CONTRIBUTING.md) · 🔒 [Security](./SECURITY.md) · 📝 [Changelog](./CHANGELOG.md)
 
-**需要一直开着对应的 CLI 吗？** 不需要。apiforge 只读取登录凭据文件并用 HTTP 自动
-刷新 OAuth token，不启动任何 CLI 子进程。
+## License & attribution
 
-## 许可与署名
+This project uses the **apiforge Personal Research & Attribution License** — see
+[LICENSE](./LICENSE). Core conditions:
 
-本项目采用 **apiforge 个人研究与署名许可（Personal Research & Attribution License）**，
-详见 [LICENSE](./LICENSE)。核心条件：
+1. **Personal, non-commercial research / learning / evaluation only**; no selling, reselling, or
+   paid-service offering.
+2. **Attribution must be retained and must NOT be removed, replaced, or altered:** any use,
+   copy, fork, modification, or distribution (source or binary) must keep [LICENSE](./LICENSE)
+   and [NOTICE](./NOTICE) intact and clearly credit the original source repository and author.
+   **Impersonation, attribution removal, or origin misrepresentation is prohibited.**
+3. You bear all risk arising from violating any AI vendor's Terms of Service (see the notice above).
+4. The software is provided "as is", without warranty of any kind.
 
-1. **仅限个人、非商业的研究 / 学习 / 评估用途**；不得出售、转售或作为付费服务提供。
-2. **必须保留来源署名，且不可移除、不可替换、不可篡改**：任何使用、拷贝、fork、修改、
-   分发（源码或二进制）都必须原样保留 [LICENSE](./LICENSE) 与 [NOTICE](./NOTICE)，
-   并清晰标注原始来源仓库地址与作者。**禁止冒名、去除署名或伪造出处。**
-3. 你需自行承担因违反各 AI 厂商服务条款而产生的一切风险（见文首声明）。
-4. 软件按“原样”提供，不含任何担保。
+## Acknowledgements
 
----
+Reverse-engineered protocols reference public community research (e.g. grok2api, codex-imagen,
+and similar projects) for **interoperability research** purposes. All trademarks and services
+belong to their respective owners; this project is **not affiliated with** any of these vendors.
 
-## 来源与致谢
-
-- 逆向协议参考了社区公开研究（如 grok2api、codex-imagen 等第三方项目）用于**互操作性
-  研究**目的。相关商标与服务归各自厂商所有；本项目与这些厂商**无任何隶属关系**。
-- 原始来源仓库：**https://github.com/DevEloLin/apiforge** （转载 / fork 请保留此出处）。
+Original source repository: **https://github.com/DevEloLin/apiforge** (please keep this
+attribution when redistributing or forking).

@@ -1,78 +1,80 @@
-# apiforge 操作手册（安装 · 配置 · Docker 打包与部署 · 运维）
+**English** | [中文](./OPERATIONS.zh-CN.md)
 
-> 面向部署与运维。客户端调用方式见 [USAGE.md](./USAGE.md)。
-> 使用前请阅读项目根 [README](../README.md) 的免责声明与 [LICENSE](../LICENSE)。
+# apiforge Operations Manual (Install · Configure · Docker · Deploy · Ops)
 
-## 目录
-1. [环境要求](#1-环境要求)
-2. [三种运行方式](#2-三种运行方式)
-3. [准备各来源登录凭据](#3-准备各来源登录凭据)
-4. [完整配置项参考](#4-完整配置项参考)
-5. [打包 Docker 镜像](#5-打包-docker-镜像)
-6. [Docker 运行与配置](#6-docker-运行与配置)
+> Aimed at deployment and operations. For how clients call the gateway, see [USAGE.md](./USAGE.md).
+> Before using, please read the disclaimer in the project root [README](../README.md) and the [LICENSE](../LICENSE).
+
+## Table of Contents
+1. [Environment Requirements](#1-environment-requirements)
+2. [Three Ways to Run](#2-three-ways-to-run)
+3. [Preparing Login Credentials for Each Source](#3-preparing-login-credentials-for-each-source)
+4. [Full Configuration Reference](#4-full-configuration-reference)
+5. [Building the Docker Image](#5-building-the-docker-image)
+6. [Running and Configuring Docker](#6-running-and-configuring-docker)
 7. [docker-compose](#7-docker-compose)
-8. [裸二进制 + systemd](#8-裸二进制--systemd)
-9. [树莓派部署](#9-树莓派部署)
-10. [前置 new-api / Cloudflare Tunnel](#10-前置-new-api--cloudflare-tunnel)
-11. [健康检查与监控](#11-健康检查与监控)
-12. [升级与回滚](#12-升级与回滚)
-13. [故障排查](#13-故障排查)
+8. [Bare Binary + systemd](#8-bare-binary--systemd)
+9. [Raspberry Pi Deployment](#9-raspberry-pi-deployment)
+10. [Fronting with new-api / Cloudflare Tunnel](#10-fronting-with-new-api--cloudflare-tunnel)
+11. [Health Checks and Monitoring](#11-health-checks-and-monitoring)
+12. [Upgrade and Rollback](#12-upgrade-and-rollback)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
-## 1. 环境要求
+## 1. Environment Requirements
 
-- **源码编译 / 交叉编译**：Go 1.26+。
-- **Docker 方式**：Docker 20+（arm64 目标可用 buildx）。
-- **凭据**：本机已登录相应 AI CLI（或手动准备凭据文件 / cookie / token）。见 §3。
-- 网络：能出网访问各厂商 API 域名（api.openai.com、api.anthropic.com、chatgpt.com、
-  githubcopilot.com、grok.com 等）。
+- **Build from source / cross-compile**: Go 1.26+.
+- **Docker**: Docker 20+ (use buildx for arm64 targets).
+- **Credentials**: the relevant AI CLI is already logged in on the machine (or you manually prepare credential files / cookies / tokens). See §3.
+- Network: outbound access to each vendor's API domains (api.openai.com, api.anthropic.com, chatgpt.com,
+  githubcopilot.com, grok.com, etc.).
 
 ---
 
-## 2. 三种运行方式
+## 2. Three Ways to Run
 
-| 方式 | 适用 | 内存 | 备注 |
+| Method | Best for | Memory | Notes |
 |---|---|---|---|
-| 源码 `go run` | 开发调试 | 中 | 最快验证 |
-| 裸二进制 + systemd | 生产/树莓派 | **最低** | 无容器开销，见 §8 |
-| Docker（scratch 镜像） | 想要容器隔离 | 低（镜像 ~7MB） | 见 §5–§7 |
+| Source `go run` | Development and debugging | Medium | Fastest to verify |
+| Bare binary + systemd | Production / Raspberry Pi | **Lowest** | No container overhead, see §8 |
+| Docker (scratch image) | When you want container isolation | Low (image ~7MB) | See §5–§7 |
 
-最简启动（源码）：
+Simplest startup (from source):
 
 ```bash
 git clone https://github.com/DevEloLin/apiforge.git && cd apiforge
 API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 ```
 
-看到 `apiforge listening ... ready=[...]` 即成功；`ready` 列表是探测到并初始化成功的来源。
+When you see `apiforge listening ... ready=[...]`, it started successfully; the `ready` list contains the sources that were detected and initialized successfully.
 
 ---
 
-## 3. 准备各来源登录凭据
+## 3. Preparing Login Credentials for Each Source
 
-apiforge **不做登录**，只读取你本机已登录的凭据文件，并在需要时用 HTTP 自动刷新 token。
+apiforge **does not log in for you**; it only reads the credential files already logged in on your machine, and refreshes tokens automatically over HTTP when needed.
 
-| 来源 | 凭据位置（自动探测） | 手动指定环境变量 | 备注 |
+| Source | Credential location (auto-detected) | Manual override environment variable | Notes |
 |---|---|---|---|
-| codex | `~/.codex/auth.json` | `CODEX_AUTHS`（逗号分隔多账户） | `codex login` 产生 |
-| claude | `~/.claude/.credentials.json` | `CLAUDE_AUTHS` | `claude` 登录产生 |
-| copilot | `~/.config/github-copilot/`（目录） | `COPILOT_GITHUB_TOKENS` | 从 apps.json/hosts.json 发现 |
-| qwen | `~/.qwen/oauth_creds.json` | `QWEN_AUTHS` | `qwen` 登录产生 |
-| gemini 🧪 | `~/.gemini/oauth_creds.json` | `GEMINI_AUTHS` + 需 `GEMINI_OAUTH_ENABLED=1` 且自备 `GEMINI_OAUTH_CLIENT_ID/SECRET` | 实验 |
-| grok-web 🧪 | 无（用环境变量） | `GROK_COOKIES`（sso 或完整 cookie 串） | 浏览器复制 sso |
-| cursor 🧪 | 无（无头机没有 state.vscdb） | `CURSOR_ACCESS_TOKEN(S)` | 从桌面 Cursor 导出 |
+| codex | `~/.codex/auth.json` | `CODEX_AUTHS` (comma-separated for multiple accounts) | Produced by `codex login` |
+| claude | `~/.claude/.credentials.json` | `CLAUDE_AUTHS` | Produced by `claude` login |
+| copilot | `~/.config/github-copilot/` (directory) | `COPILOT_GITHUB_TOKENS` | Discovered from apps.json/hosts.json |
+| qwen | `~/.qwen/oauth_creds.json` | `QWEN_AUTHS` | Produced by `qwen` login |
+| gemini 🧪 | `~/.gemini/oauth_creds.json` | `GEMINI_AUTHS` + requires `GEMINI_OAUTH_ENABLED=1` and your own `GEMINI_OAUTH_CLIENT_ID/SECRET` | Experimental |
+| grok-web 🧪 | none (use environment variables) | `GROK_COOKIES` (sso or the full cookie string) | Copy sso from the browser |
+| cursor 🧪 | none (headless machines have no state.vscdb) | `CURSOR_ACCESS_TOKEN(S)` | Export from desktop Cursor |
 
-**多账户**：`CODEX_AUTHS=/path/a/auth.json,/path/b/auth.json`；或 `GROK_COOKIES=cookie1,cookie2`。
-每个凭据成为账户池里的一个账户，自动轮询 + 失败切换。
+**Multiple accounts**: `CODEX_AUTHS=/path/a/auth.json,/path/b/auth.json`; or `GROK_COOKIES=cookie1,cookie2`.
+Each credential becomes one account in the account pool, with automatic round-robin + failover.
 
-**API Key 直连**（与 CLI 账户混入同一 provider 池）：`OPENAI_API_KEYS`、`ANTHROPIC_API_KEYS`、
-各厂商 `<VENDOR>_API_KEYS`（见 §4）。
+**Direct API-key access** (mixed into the same provider pool as CLI accounts): `OPENAI_API_KEYS`, `ANTHROPIC_API_KEYS`,
+and each vendor's `<VENDOR>_API_KEYS` (see §4).
 
-Grok / Cursor token 获取：
+Obtaining Grok / Cursor tokens:
 
 ```bash
-# Grok：浏览器登录 grok.com → 开发者工具 → Application → Cookies → 复制 sso 值
+# Grok: log in to grok.com in the browser → DevTools → Application → Cookies → copy the sso value
 export GROK_COOKIES='sso=eyJ...'            # 若被 Cloudflare 403，用完整串：
 export GROK_COOKIES='sso=eyJ...; cf_clearance=xxxx'
 
@@ -84,94 +86,94 @@ export CURSOR_ACCESS_TOKEN='eyJ...'
 
 ---
 
-## 4. 完整配置项参考
+## 4. Full Configuration Reference
 
-所有配置来自**环境变量**（同一镜像可在 `docker run` 时改配置，无需重建）。
+All configuration comes from **environment variables** (the same image can be reconfigured at `docker run` time, with no rebuild).
 
-### 核心
-| 变量 | 默认 | 说明 |
+### Core
+| Variable | Default | Description |
 |---|---|---|
-| `API_KEYS` | 空 | 客户端访问密钥，逗号分隔。空且非回环绑定 → **拒绝启动** |
-| `HOST` | `127.0.0.1` | 监听地址。容器内需 `0.0.0.0` |
-| `PORT` | `8899` | 监听端口 |
+| `API_KEYS` | empty | Client access keys, comma-separated. Empty plus a non-loopback bind → **refuse to start** |
+| `HOST` | `127.0.0.1` | Listen address. Inside a container use `0.0.0.0` |
+| `PORT` | `8899` | Listen port |
 | `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
-| `ADMIN_TOKEN` | 空 | 管理 API 令牌；空则 `/admin/*` 关闭 |
-| `ALLOW_UNAUTHENTICATED` | `false` | 允许无密钥 + 非回环启动（危险，仅调试） |
+| `ADMIN_TOKEN` | empty | Admin API token; empty disables `/admin/*` |
+| `ALLOW_UNAUTHENTICATED` | `false` | Allow starting with no keys + non-loopback (dangerous, debug only) |
 
-### 池 / 并发 / 限流
-| 变量 | 默认 | 说明 |
+### Pool / Concurrency / Rate Limiting
+| Variable | Default | Description |
 |---|---|---|
-| `MAX_ACCOUNT_CONCURRENCY` | `3` | 每账户并发上限；`0`=不限 |
-| `QUEUE_WAIT_MS` | `60000` | 账户全忙时排队等空位的最长毫秒数 |
-| `STICKY_TTL_SECONDS` | `0` | 会话粘滞 TTL（`x-apiforge-session`）；`0`=关 |
-| `RATE_LIMIT_RPM` | `0` | 每密钥每分钟请求上限；`0`=关 |
-| `MAX_BODY_BYTES` | `10485760` | 请求体上限；`0`=不限 |
-| `UPSTREAM_TIMEOUT_MS` | `600000` | 上游超时（预留） |
-| `GOMEMLIMIT` | 镜像内 `64MiB` | Go 堆软上限（低内存机建议设置） |
+| `MAX_ACCOUNT_CONCURRENCY` | `3` | Per-account concurrency cap; `0`=unlimited |
+| `QUEUE_WAIT_MS` | `60000` | Max milliseconds to queue for a free slot when all accounts are busy |
+| `STICKY_TTL_SECONDS` | `0` | Session stickiness TTL (`x-apiforge-session`); `0`=off |
+| `RATE_LIMIT_RPM` | `0` | Per-key requests-per-minute cap; `0`=off |
+| `MAX_BODY_BYTES` | `10485760` | Request body cap; `0`=unlimited |
+| `UPSTREAM_TIMEOUT_MS` | `600000` | Upstream timeout (reserved) |
+| `GOMEMLIMIT` | `64MiB` in the image | Go heap soft limit (recommended on low-memory machines) |
 
-### 各来源开关 / 凭据
-| 变量 | 默认 | 说明 |
+### Per-Source Toggles / Credentials
+| Variable | Default | Description |
 |---|---|---|
-| `<P>_ENABLED` | `true` | 关闭某来源，如 `CURSOR_ENABLED=false`（P=CODEX/CLAUDE/COPILOT/CURSOR/QWEN/GEMINI） |
-| `<P>_AUTHS` / `<P>_AUTH` | 自动探测 | 凭据文件路径（多个逗号分隔） |
-| `CODEX_MODELS` / `CLAUDE_MODELS` / `GEMINI_CLI_MODELS` | 内置 | 覆盖广告的模型列表 |
-| `CODEX_CLIENT_VERSION` | `0.142.5` | Codex 后端版本头；模型被拒时升级此值 |
-| `CODEX_USER_AGENT` / `CLAUDE_USER_AGENT` / `GEMINI_USER_AGENT` | 内置 | 出站 UA 覆盖 |
-| `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` | 官方 | 覆盖 codex(key)/claude 的 base |
-| `OPENAI_API_KEYS` / `ANTHROPIC_API_KEYS` | 空 | 官方 key，与 CLI 账户混池 |
-| `GROK_COOKIES` 🧪 | 空 | grok.com 订阅 cookie（多账户逗号分隔） |
-| `CURSOR_ACCESS_TOKEN(S)` 🧪 | 空 | Cursor 会话 token |
-| `GEMINI_OAUTH_ENABLED` 🧪 | `false` | 开启 gemini-cli |
-| `GEMINI_OAUTH_CLIENT_ID` / `_SECRET` 🧪 | 空 | gemini-cli 公开 OAuth client（本仓库不内置，需自备） |
-| `COPILOT_GITHUB_TOKENS` | 空 | 额外 GitHub token（逗号分隔） |
+| `<P>_ENABLED` | `true` | Disable a source, e.g. `CURSOR_ENABLED=false` (P=CODEX/CLAUDE/COPILOT/CURSOR/QWEN/GEMINI) |
+| `<P>_AUTHS` / `<P>_AUTH` | auto-detect | Credential file path (comma-separated for multiple) |
+| `CODEX_MODELS` / `CLAUDE_MODELS` / `GEMINI_CLI_MODELS` | built-in | Override the advertised model list |
+| `CODEX_CLIENT_VERSION` | `0.142.5` | Codex backend version header; bump this when a model is rejected |
+| `CODEX_USER_AGENT` / `CLAUDE_USER_AGENT` / `GEMINI_USER_AGENT` | built-in | Override the outbound UA |
+| `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL` | official | Override the base for codex(key)/claude |
+| `OPENAI_API_KEYS` / `ANTHROPIC_API_KEYS` | empty | Official keys, pooled with CLI accounts |
+| `GROK_COOKIES` 🧪 | empty | grok.com subscription cookies (comma-separated for multiple accounts) |
+| `CURSOR_ACCESS_TOKEN(S)` 🧪 | empty | Cursor session token |
+| `GEMINI_OAUTH_ENABLED` 🧪 | `false` | Enable gemini-cli |
+| `GEMINI_OAUTH_CLIENT_ID` / `_SECRET` 🧪 | empty | gemini-cli public OAuth client (not bundled in this repo; bring your own) |
+| `COPILOT_GITHUB_TOKENS` | empty | Extra GitHub tokens (comma-separated) |
 
-### 厂商 API Key（供 key 即启用；20+ 家）
-`DEEPSEEK_API_KEYS`、`MOONSHOT_API_KEYS`、`ZHIPU_API_KEYS`、`QWEN_API_KEYS`、`BAIDU_API_KEYS`、
-`SENSETIME_API_KEYS`、`SKYWORK_API_KEYS`、`AI360_API_KEYS`、`MINIMAX_API_KEYS`、`DOUBAO_API_KEYS`、
-`HUNYUAN_API_KEYS`、`SPARK_API_KEYS`、`STEPFUN_API_KEYS`、`YI_API_KEYS`、`BAICHUAN_API_KEYS`、
-`SILICONFLOW_API_KEYS`、`GEMINI_API_KEYS`、`AWS_BEDROCK_API_KEYS`（+`AWS_BEDROCK_BASE_URL`）、
-`AGNES_API_KEYS`、`OPENROUTER_API_KEYS`、`XAI_API_KEYS`（官方 Grok，+`XAI_BASE_URL`、`GROK_MODELS`）。
-每家还支持 `<VENDOR>_MODELS` 覆盖模型列表。
+### Vendor API Keys (enabled by supplying a key; 20+ vendors)
+`DEEPSEEK_API_KEYS`, `MOONSHOT_API_KEYS`, `ZHIPU_API_KEYS`, `QWEN_API_KEYS`, `BAIDU_API_KEYS`,
+`SENSETIME_API_KEYS`, `SKYWORK_API_KEYS`, `AI360_API_KEYS`, `MINIMAX_API_KEYS`, `DOUBAO_API_KEYS`,
+`HUNYUAN_API_KEYS`, `SPARK_API_KEYS`, `STEPFUN_API_KEYS`, `YI_API_KEYS`, `BAICHUAN_API_KEYS`,
+`SILICONFLOW_API_KEYS`, `GEMINI_API_KEYS`, `AWS_BEDROCK_API_KEYS` (+`AWS_BEDROCK_BASE_URL`),
+`AGNES_API_KEYS`, `OPENROUTER_API_KEYS`, `XAI_API_KEYS` (official Grok, +`XAI_BASE_URL`, `GROK_MODELS`).
+Each vendor also supports `<VENDOR>_MODELS` to override its model list.
 
-### 自定义中转站
-| 变量 | 说明 |
+### Custom Relays
+| Variable | Description |
 |---|---|
-| `CUSTOM_PROVIDERS` | 内联 JSON 数组，见下 |
-| `CUSTOM_PROVIDERS_FILE` | JSON 文件路径 |
-| `CREDS_ROOT` | keyFile 允许的根目录（默认 HOME） |
-| `ALLOW_ANY_KEYFILE` | `1` 关闭 keyFile 路径穿越检查 |
+| `CUSTOM_PROVIDERS` | Inline JSON array, see below |
+| `CUSTOM_PROVIDERS_FILE` | Path to a JSON file |
+| `CREDS_ROOT` | Root directory allowed for keyFile (defaults to HOME) |
+| `ALLOW_ANY_KEYFILE` | `1` disables the keyFile path-traversal check |
 
 ```json
 [{"id":"myrelay","baseUrl":"https://api.example.com","models":["gpt-4o"],
   "apiKeys":["sk-xxx"],"ownedBy":"me","authHeader":"authorization",
   "headers":{"x-foo":"bar"}}]
 ```
-`apiKeys` 也可用 `keysEnv`（从某环境变量读）或 `keyFile`（读文件，复用第三方 CLI token）。
+`apiKeys` can also use `keysEnv` (read from an environment variable) or `keyFile` (read from a file, reusing a third-party CLI token).
 
-完整样例见 [.env.example](../.env.example)。
+For a full example see [.env.example](../.env.example).
 
 ---
 
-## 5. 打包 Docker 镜像
+## 5. Building the Docker Image
 
-仓库自带多阶段 [Dockerfile](../Dockerfile)：`golang:1.26-alpine` 编译 → `scratch` 运行，
-`CGO_ENABLED=0` 静态二进制 + CA 证书，最终镜像 **≈7MB**，非 root uid 运行。
+The repo ships a multi-stage [Dockerfile](../Dockerfile): `golang:1.26-alpine` builds → `scratch` runs,
+`CGO_ENABLED=0` static binary + CA certificates, with a final image of **≈7MB** running as a non-root uid.
 
-### 5.1 本机同架构构建
+### 5.1 Same-Architecture Build on the Local Machine
 ```bash
 cd apiforge
 docker build -t apiforge:latest .
 docker images apiforge     # 查看大小
 ```
 
-### 5.2 交叉构建 arm64（给树莓派）
+### 5.2 Cross-Building arm64 (for the Raspberry Pi)
 ```bash
 # 需 buildx（Docker Desktop 自带）
 docker buildx build --platform linux/arm64 -t apiforge:arm64 --load .
 ```
 
-### 5.3 无 Docker 的机器：交叉编译二进制 → 在目标机装进镜像
-Mac/无 Docker 时先出二进制，再到有 Docker 的目标机构建极简镜像：
+### 5.3 Machines Without Docker: Cross-Compile the Binary → Bake It Into an Image on the Target Machine
+On a Mac / without Docker, first produce the binary, then build a minimal image on a target machine that has Docker:
 ```bash
 # 在 Mac 上交叉编译（约 6.8MB）
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
@@ -189,20 +191,20 @@ ENTRYPOINT ["/apiforge"]
 EOF
 docker build -f Dockerfile.prebuilt -t apiforge:arm64 .
 ```
-> 提示：`--from=alpine` 只为取 CA 证书。也可预先把 `ca-certificates.crt` 放到构建目录直接 COPY。
+> Tip: `--from=alpine` is only there to grab the CA certificates. You can also place `ca-certificates.crt` in the build directory beforehand and COPY it directly.
 
 ---
 
-## 6. Docker 运行与配置
+## 6. Running and Configuring Docker
 
-镜像内默认 `HOST=0.0.0.0`、`PORT=8899`、`GOMEMLIMIT=64MiB`、非 root uid `65532`。
-**务必只把端口发布到 `127.0.0.1`**，对外由 §10 的反代做鉴权/多用户。
+Inside the image the defaults are `HOST=0.0.0.0`, `PORT=8899`, `GOMEMLIMIT=64MiB`, and non-root uid `65532`.
+**Always publish the port to `127.0.0.1` only**, and let the reverse proxy in §10 handle authentication / multi-user access.
 
-### 6.1 关键：凭据如何进容器
-`scratch` 镜像**没有 `/root` 家目录、没有 `/etc/passwd`**，所以自动探测 `~/.codex` 之类
-**在容器里不生效**。两种正确做法（任选）：
+### 6.1 Key Point: How Credentials Get Into the Container
+The `scratch` image **has no `/root` home directory and no `/etc/passwd`**, so auto-detecting things like `~/.codex`
+**does not work inside the container**. Two correct approaches (pick either):
 
-**A. 显式路径（推荐）** —— 挂载凭据目录并用 `*_AUTHS` 指到挂载点：
+**A. Explicit paths (recommended)** — mount the credential directory and point `*_AUTHS` at the mount point:
 ```bash
 docker run -d --name apiforge \
   -p 127.0.0.1:8899:8899 \
@@ -214,7 +216,7 @@ docker run -d --name apiforge \
   apiforge:latest
 ```
 
-**B. 设 HOME** —— 让自动探测生效：
+**B. Set HOME** — so auto-detection works:
 ```bash
 docker run -d --name apiforge \
   -p 127.0.0.1:8899:8899 \
@@ -224,13 +226,14 @@ docker run -d --name apiforge \
   apiforge:latest
 ```
 
-> **读写权限**：OAuth 刷新后 apiforge 会把新 token **原子写回**凭据文件，以便与 CLI 保持
-> 同步。若用 `:ro` 只读挂载，刷新仍在内存生效但无法落盘（日志出现 warn，token 过期后需
-> 重新提供）。想持久化就用**可写**挂载（去掉 `:ro`），并确保容器 uid `65532` 对该目录可写
-> （或加 `--user 0:0` 以 root 运行——牺牲最小权限换便利）。
+> **Read-write permission**: after an OAuth refresh, apiforge **atomically writes the new token back** to the credential file to stay
+> in sync with the CLI. If you use a `:ro` read-only mount, the refresh still takes effect in memory but cannot be persisted (a warn
+> appears in the log, and once the token expires you must supply it again). To persist, use a **writable** mount (drop `:ro`), and make
+> sure the container uid `65532` can write to that directory
+> (or add `--user 0:0` to run as root — trading least-privilege for convenience).
 
-### 6.2 纯环境变量来源（无需挂载）
-grok-web / cursor / 各厂商 key 只用环境变量，无需挂卷：
+### 6.2 Environment-Variable-Only Sources (No Mount Needed)
+grok-web / cursor / each vendor's keys use environment variables only, with no volume needed:
 ```bash
 docker run -d --name apiforge -p 127.0.0.1:8899:8899 \
   -e API_KEYS=sk-my-secret \
@@ -240,7 +243,7 @@ docker run -d --name apiforge -p 127.0.0.1:8899:8899 \
   apiforge:latest
 ```
 
-### 6.3 用 env 文件
+### 6.3 Using an env File
 ```bash
 cp .env.example my.env && vim my.env      # 填好后（注意去掉注释里的示例）
 docker run -d --name apiforge -p 127.0.0.1:8899:8899 --env-file my.env \
@@ -248,7 +251,7 @@ docker run -d --name apiforge -p 127.0.0.1:8899:8899 --env-file my.env \
   apiforge:latest
 ```
 
-### 6.4 调优
+### 6.4 Tuning
 ```bash
 -e MAX_ACCOUNT_CONCURRENCY=3 -e QUEUE_WAIT_MS=60000 \
 -e GOMEMLIMIT=48MiB --memory=128m           # 低内存机限制容器内存
@@ -288,7 +291,7 @@ docker compose up -d && docker compose logs -f
 
 ---
 
-## 8. 裸二进制 + systemd（最省内存，推荐树莓派）
+## 8. Bare Binary + systemd (Lowest Memory, Recommended for Raspberry Pi)
 
 ```bash
 # 目标机上放好二进制 /opt/apiforge/apiforge 与 /opt/apiforge/apiforge.env
@@ -319,70 +322,70 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now apiforge
 journalctl -u apiforge -f
 ```
-`apiforge.env` 内容即 §4 的环境变量（`KEY=VALUE` 每行一个）。`ReadWritePaths` 要包含
-凭据目录，否则刷新后无法写回。
+The contents of `apiforge.env` are the environment variables from §4 (one `KEY=VALUE` per line). `ReadWritePaths` must include the
+credential directory, otherwise refreshed tokens cannot be written back.
 
 ---
 
-## 9. 树莓派部署
+## 9. Raspberry Pi Deployment
 
-1. 交叉编译（§5.3）或在派上 `docker build`（1GB 派编译 Go 偏吃紧，优先交叉编译传二进制）。
-2. 优先 **裸二进制 + systemd**（§8），内存最省；或极简镜像（§5.3 + §6）。
-3. 凭据：把桌面机登录好的 `auth.json` / `.credentials.json` `scp` 到派上，用 `*_AUTHS` 指定；
-   grok/cursor 用环境变量传 token。
-4. 建议 `GOMEMLIMIT=48–64MiB`、`MAX_ACCOUNT_CONCURRENCY` 视账户数而定。
-5. 供电务必用合规 5V/3A 电源（欠压会限频导致偶发超时）。
+1. Cross-compile (§5.3) or `docker build` on the Pi (a 1GB Pi is tight for building Go, so prefer cross-compiling and transferring the binary).
+2. Prefer **bare binary + systemd** (§8) for the lowest memory; or a minimal image (§5.3 + §6).
+3. Credentials: `scp` the `auth.json` / `.credentials.json` you logged in on your desktop over to the Pi and point `*_AUTHS` at them;
+   for grok/cursor pass the token via environment variables.
+4. Recommended `GOMEMLIMIT=48–64MiB`; set `MAX_ACCOUNT_CONCURRENCY` based on the number of accounts.
+5. Always use a compliant 5V/3A power supply (undervoltage causes throttling and occasional timeouts).
 
 ---
 
-## 10. 前置 new-api / Cloudflare Tunnel
+## 10. Fronting with new-api / Cloudflare Tunnel
 
-apiforge 只做“把订阅变标准 API”，**多用户 / 计费 / 公网入口**交给前置层：
+apiforge only "turns subscriptions into a standard API"; leave **multi-user / billing / public entry point** to the fronting layer:
 
 ```
 公网用户 → Cloudflare Tunnel → new-api(多用户+计费) → apiforge(127.0.0.1:8899) → 各厂商
 ```
 
-- apiforge 只监听 `127.0.0.1`，设强 `API_KEYS`（给 new-api 用）。
-- new-api 里把 apiforge 配成一个 OpenAI 渠道，base 填 `http://127.0.0.1:8899/v1`，
-  密钥填 apiforge 的 `API_KEYS`。
-- Cloudflare Tunnel 指向 new-api，不直接暴露 apiforge。
+- apiforge listens on `127.0.0.1` only, with a strong `API_KEYS` (used by new-api).
+- In new-api, configure apiforge as an OpenAI channel with base `http://127.0.0.1:8899/v1`,
+  and the key set to apiforge's `API_KEYS`.
+- Point the Cloudflare Tunnel at new-api, not directly at apiforge.
 
-> ⚠️ 对外提供服务会显著放大账号封禁风险（见免责声明）。仅建议个人/小范围研究。
-
----
-
-## 11. 健康检查与监控
-
-- `GET /health`（**无需鉴权**）返回就绪 / 禁用的 provider 及模型，用于探活。
-- `GET /admin/accounts`（需 `ADMIN_TOKEN`）看各账户在途数 / 冷却 / 禁用状态。
-- **scratch 镜像无 shell**，无法用容器内 `HEALTHCHECK curl`。改为：
-  - 宿主机探活：`curl -fsS http://127.0.0.1:8899/health`；
-  - 或编排层用 TCP 探活端口 8899；
-  - 或换 `gcr.io/distroless/static` 基础镜像后用外部探针。
-- 日志为 JSON（slog），已对 token / 绝对路径脱敏，可直接接日志采集。
+> ⚠️ Serving publicly significantly amplifies the risk of account bans (see the disclaimer). Recommended for personal / small-scale research only.
 
 ---
 
-## 12. 升级与回滚
+## 11. Health Checks and Monitoring
 
-- **二进制**：替换 `/opt/apiforge/apiforge` → `systemctl restart apiforge`。保留上一版二进制以便回滚。
-- **Docker**：`docker build` 新 tag → `docker compose up -d`（滚动）；回滚 = 切回旧 tag。
-- 配置全在环境变量，升级不动凭据；优雅停机会等在途请求（SIGTERM，10s）。
+- `GET /health` (**no authentication required**) returns the ready / disabled providers and models, for liveness checks.
+- `GET /admin/accounts` (requires `ADMIN_TOKEN`) shows each account's in-flight count / cooldown / disabled state.
+- **The scratch image has no shell**, so an in-container `HEALTHCHECK curl` cannot be used. Instead:
+  - Probe from the host: `curl -fsS http://127.0.0.1:8899/health`;
+  - Or have the orchestration layer probe TCP port 8899;
+  - Or switch to the `gcr.io/distroless/static` base image and use an external probe.
+- Logs are JSON (slog), with tokens / absolute paths already redacted, so they can be fed straight into log collection.
 
 ---
 
-## 13. 故障排查
+## 12. Upgrade and Rollback
 
-| 现象 | 排查 |
+- **Binary**: replace `/opt/apiforge/apiforge` → `systemctl restart apiforge`. Keep the previous binary for rollback.
+- **Docker**: `docker build` a new tag → `docker compose up -d` (rolling); rollback = switch back to the old tag.
+- Configuration lives entirely in environment variables, so upgrades never touch credentials; graceful shutdown waits for in-flight requests (SIGTERM, 10s).
+
+---
+
+## 13. Troubleshooting
+
+| Symptom | Diagnosis |
 |---|---|
-| 启动即退出 `refusing to start` | 未设 `API_KEYS` 且绑了非回环。设 `API_KEYS` 或 `HOST=127.0.0.1` |
-| `/health` 里某来源在 `disabled` | 看 `reason`：多为凭据缺失/过期或刷新失败；重新登录该 CLI 或检查 `*_AUTHS` 路径 |
-| Docker 里探测不到 CLI 凭据 | scratch 无 HOME，必须用 `*_AUTHS` 显式路径或设 `HOME`（§6.1） |
-| 刷新后 token 没写回 | 凭据挂载是 `:ro` 或 uid 无写权限；改可写挂载 / `ReadWritePaths` |
-| grok-web 返回 403 / Cloudflare 挑战 | Go TLS 指纹被拦；`GROK_COOKIES` 里补 `cf_clearance`（§3） |
-| 请求偶发 503 “busy” | 账户全忙且超过 `QUEUE_WAIT_MS`；调大并发帽 / 加账户 / 调大 `QUEUE_WAIT_MS` |
-| 请求 503 “unavailable” | 账户全部冷却（429/鉴权失败）；`/admin/accounts` 看冷却时间 |
-| Codex 新模型被拒“请升级” | 提高 `CODEX_CLIENT_VERSION` 到本机 Codex CLI 版本 |
-| 模型 404 no provider | 该模型没有就绪的 provider；`/v1/models` 看可用列表，注意 `copilot/`、`grok-web/` 前缀 |
-| 内存偏高 | 设 `GOMEMLIMIT`；流式请求会占用账户槽位直到流结束属正常 |
+| Exits immediately with `refusing to start` | `API_KEYS` not set while bound to a non-loopback address. Set `API_KEYS` or `HOST=127.0.0.1` |
+| A source shows `disabled` in `/health` | Check `reason`: usually missing/expired credentials or a failed refresh; log in to that CLI again or check the `*_AUTHS` path |
+| CLI credentials not detected in Docker | scratch has no HOME; you must use an explicit `*_AUTHS` path or set `HOME` (§6.1) |
+| Token not written back after refresh | The credential mount is `:ro` or the uid has no write permission; switch to a writable mount / `ReadWritePaths` |
+| grok-web returns 403 / a Cloudflare challenge | The Go TLS fingerprint is blocked; add `cf_clearance` to `GROK_COOKIES` (§3) |
+| Occasional 503 "busy" | All accounts are busy and `QUEUE_WAIT_MS` was exceeded; raise the concurrency cap / add accounts / increase `QUEUE_WAIT_MS` |
+| 503 "unavailable" | All accounts are in cooldown (429/auth failure); check cooldown times via `/admin/accounts` |
+| Codex rejects a new model with "please upgrade" | Raise `CODEX_CLIENT_VERSION` to match your local Codex CLI version |
+| Model 404 no provider | That model has no ready provider; check the available list via `/v1/models`, and mind the `copilot/` and `grok-web/` prefixes |
+| Memory runs high | Set `GOMEMLIMIT`; a streaming request holding an account slot until the stream ends is normal |
