@@ -97,10 +97,17 @@ func stringContent(raw json.RawMessage) (string, bool) {
 }
 
 func normalizeContent(raw json.RawMessage) []any {
-	if len(raw) == 0 {
+	// null / absent / empty-string content yields NO blocks. Anthropic rejects
+	// empty text blocks with 400, and the common assistant tool-call turn is
+	// {"content":null,"tool_calls":[...]} — its tool_use blocks are added
+	// separately, so emitting an empty text block here would break it.
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
 		return []any{}
 	}
 	if s, ok := stringContent(raw); ok {
+		if s == "" {
+			return []any{}
+		}
 		return []any{map[string]any{"type": "text", "text": s}}
 	}
 	var parts []contentPart
