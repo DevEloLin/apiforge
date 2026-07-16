@@ -275,7 +275,7 @@ refreshes OAuth tokens over HTTP; it never spawns CLI subprocesses.
 - 🛠️ [Operations Manual](./docs/OPERATIONS.md) — install, configure, Docker, deploy, troubleshoot
 - 🧩 [Architecture](./docs/ARCHITECTURE.md) — design overview for contributors
 - 🔁 [Parity](./docs/PARITY.md) — feature parity vs the TypeScript original
-- 🤝 [Contributing](./CONTRIBUTING.md) · 🔒 [Security](./SECURITY.md) · 📝 [Changelog](./CHANGELOG.md)
+- 🤝 [Contributing](./docs/CONTRIBUTING.md) · 🔒 [Security](./docs/SECURITY.md) · 📝 [Changelog](./docs/CHANGELOG.md)
 
 ## License & attribution
 

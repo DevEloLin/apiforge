@@ -28,4 +28,4 @@ All notable changes are documented here. Format based on
 
 ### Notes
 - Reverse-engineered providers (`cursor`, `grok-web`) and `gemini-cli` are EXPERIMENTAL / opt-in.
-- See [docs/PARITY.md](./docs/PARITY.md) for verification status.
+- See [docs/PARITY.md](./PARITY.md) for verification status.

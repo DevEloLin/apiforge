@@ -128,12 +128,15 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 docker build -t apiforge .
 docker run --rm -p 127.0.0.1:8899:8899 \
   -e API_KEYS=sk-my-secret \
-  -v $HOME/.codex:/root/.codex:ro \
-  -v $HOME/.claude:/root/.claude:ro \
+  -e CODEX_AUTHS=/creds/codex/auth.json \
+  -v "$HOME/.codex:/creds/codex" \
   apiforge
 ```
 
-> 容器内默认 `HOST=0.0.0.0`，请只发布到 `127.0.0.1`（如上），前面再挂 new-api /
+> ⚠️ scratch 镜像**没有家目录**，自动探测 `~/.codex` 在容器里不生效，须用 `*_AUTHS`
+> 显式路径（如上）或设 `HOME`；想持久化刷新后的 token 用**可写**挂载。详见
+> [操作手册 §6](./docs/OPERATIONS.zh-CN.md)。
+> 容器内默认 `HOST=0.0.0.0`，请只发布到 `127.0.0.1`，前面再挂 new-api /
 > Cloudflare Tunnel 做多用户与鉴权。
 
 启动后验证：
@@ -320,7 +323,7 @@ xAI Grok…）+ 自定义中转站。
 - 🛠️ [操作手册](./docs/OPERATIONS.zh-CN.md) —— 安装、配置、Docker、部署、排错
 - 🧩 [架构](./docs/ARCHITECTURE.zh-CN.md) —— 面向贡献者的设计概览
 - 🔁 [对照 PARITY](./docs/PARITY.zh-CN.md) —— 与 TS 原版的功能对照
-- 🤝 [贡献指南](./CONTRIBUTING.md) · 🔒 [安全策略](./SECURITY.md) · 📝 [变更记录](./CHANGELOG.md)
+- 🤝 [贡献指南](./docs/CONTRIBUTING.md) · 🔒 [安全策略](./docs/SECURITY.md) · 📝 [变更记录](./docs/CHANGELOG.md)
 
 ## 许可与署名
 

@@ -11,8 +11,8 @@
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Design overview for contributors |
 | [PARITY.md](./PARITY.md) | Feature parity vs the TypeScript original + verification status |
 
-See also (repo root): [README](../README.md) · [CONTRIBUTING](../CONTRIBUTING.md) ·
-[SECURITY](../SECURITY.md) · [CHANGELOG](../CHANGELOG.md) · [LICENSE](../LICENSE).
+See also (repo root): [README](../README.md) · [CONTRIBUTING](./CONTRIBUTING.md) ·
+[SECURITY](./SECURITY.md) · [CHANGELOG](./CHANGELOG.md) · [LICENSE](../LICENSE).
 
 ---
 
@@ -25,5 +25,5 @@ See also (repo root): [README](../README.md) · [CONTRIBUTING](../CONTRIBUTING.m
 | [架构 ARCHITECTURE.zh-CN.md](./ARCHITECTURE.zh-CN.md) | 面向贡献者的设计概览 |
 | [对照 PARITY.zh-CN.md](./PARITY.zh-CN.md) | 与 TS 原版的功能对照 + 验证状态 |
 
-另见（仓库根）：[README](../README.zh-CN.md) · [贡献](../CONTRIBUTING.md) ·
-[安全](../SECURITY.md) · [变更记录](../CHANGELOG.md) · [许可](../LICENSE)。
+另见（仓库根）：[README](../README.zh-CN.md) · [贡献](./CONTRIBUTING.md) ·
+[安全](./SECURITY.md) · [变更记录](./CHANGELOG.md) · [许可](../LICENSE)。
