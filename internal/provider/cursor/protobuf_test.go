@@ -95,6 +95,28 @@ func TestStreamDeltas_MultiFrameAndTrailer(t *testing.T) {
 	}
 }
 
+func TestReadMessage_MalformedLengthNoPanic(t *testing.T) {
+	// field 1, wire 2 (length-delimited), then a varint length with bit 63 set
+	// (0xFF*9 → huge uint64). Must not panic and must stop cleanly.
+	buf := []byte{0x0a, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("readMessage panicked on malformed length: %v", r)
+		}
+	}()
+	_ = readMessage(buf) // just must not panic
+}
+
+func TestStreamDeltas_OversizedFrameAborts(t *testing.T) {
+	// A frame claiming ~4GB must abort without allocating.
+	frame := []byte{0x00, 0x7f, 0xff, 0xff, 0xff} // flag + length 0x7FFFFFFF
+	got := ""
+	streamDeltas(bytes.NewReader(frame), func(s string) { got += s })
+	if got != "" {
+		t.Fatalf("expected no output from oversized frame, got %q", got)
+	}
+}
+
 func TestNormalizeToken(t *testing.T) {
 	if got := normalizeToken("user_01ABC::jwt.body.sig"); got != "jwt.body.sig" {
 		t.Fatalf("web form = %q", got)

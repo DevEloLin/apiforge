@@ -128,6 +128,25 @@ func TestWithAccountRetry_NoQueueWhenAccountsFailed(t *testing.T) {
 	}
 }
 
+func TestWithAccountRetry_PanicInFnReleasesSlot(t *testing.T) {
+	// A panic inside fn must not leak the concurrency slot: after it unwinds,
+	// the account must be acquirable again.
+	p := onePool(t, 1)
+	t.Setenv("QUEUE_WAIT_MS", "100")
+
+	func() {
+		defer func() { _ = recover() }() // catch the propagated panic
+		_, _ = WithAccountRetry(context.Background(), p, "", "",
+			func(pool.Account[string]) (*http.Response, error) { panic("boom") })
+	}()
+
+	// Slot must be free again (Acquire succeeds).
+	if !p.Acquire("a#1") {
+		t.Fatal("slot leaked after panic in fn — account not acquirable")
+	}
+	p.Release("a#1")
+}
+
 func TestWithAccountRetry_ManyWaitersDrainInOrder(t *testing.T) {
 	// 1 account, cap=2, 10 concurrent requests, each "upstream call" takes ~30ms.
 	// All 10 must complete within the queue budget.

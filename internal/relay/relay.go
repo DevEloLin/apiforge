@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -96,41 +97,65 @@ func tryAccounts[C any](
 			busySkips++ // at concurrency cap — queueable
 			continue
 		}
-		resp, err := fn(acc)
-		if err != nil {
-			p.Release(acc.ID)
-			if ctx.Err() != nil {
-				return nil, ctx.Err(), busySkips // client disconnected — don't blame the account
-			}
-			p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout: cool briefly
-			continue
+		resp, err, retriable := attemptOnce(ctx, p, acc, session, fn)
+		if retriable {
+			continue // account cooled; try the next candidate
 		}
-		switch {
-		case resp.StatusCode < 300:
-			p.MarkOk(acc.ID)
-			p.Bind(session, acc.ID)
-			resp.Body = &releaseCloser{ReadCloser: resp.Body, release: func() { p.Release(acc.ID) }}
-			return resp, nil, busySkips
-		case resp.StatusCode == 429:
-			drain(resp)
-			p.Release(acc.ID)
-			p.MarkRateLimited(acc.ID, retryAfter(resp))
-		case resp.StatusCode == 401 || resp.StatusCode == 403:
-			drain(resp)
-			p.Release(acc.ID)
-			p.MarkAuthFailed(acc.ID)
-		case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
-			drain(resp)
-			p.Release(acc.ID)
-			p.MarkRateLimited(acc.ID, 10*time.Second)
-		default:
-			// Non-retriable (400/404/422/deterministic 5xx): return upstream's
-			// error body to the client verbatim.
-			p.Release(acc.ID)
-			return resp, nil, busySkips
-		}
+		return resp, err, busySkips // terminal: success, client-cancel, or passthrough error
 	}
 	return nil, nil, busySkips
+}
+
+// attemptOnce runs fn against one already-acquired account. A deferred release
+// frees the concurrency slot on EVERY exit — including a panic inside fn — EXCEPT
+// the success path, which hands the slot to the response body's releaseCloser.
+// Returns retriable=true when the caller should try the next account.
+func attemptOnce[C any](
+	ctx context.Context,
+	p *pool.Pool[C],
+	acc pool.Account[C],
+	session string,
+	fn func(acc pool.Account[C]) (*http.Response, error),
+) (resp *http.Response, err error, retriable bool) {
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			p.Release(acc.ID) // covers all non-success exits and any panic in fn
+		}
+	}()
+
+	resp, err = fn(acc)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err(), false // client disconnected — don't blame the account
+		}
+		p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout: cool briefly
+		return nil, nil, true
+	}
+	switch {
+	case resp.StatusCode < 300:
+		p.MarkOk(acc.ID)
+		p.Bind(session, acc.ID)
+		resp.Body = &releaseCloser{ReadCloser: resp.Body, release: func() { p.Release(acc.ID) }}
+		handedOff = true // slot released when the (possibly streamed) body closes
+		return resp, nil, false
+	case resp.StatusCode == 429:
+		drain(resp)
+		p.MarkRateLimited(acc.ID, retryAfter(resp))
+		return nil, nil, true
+	case resp.StatusCode == 401 || resp.StatusCode == 403:
+		drain(resp)
+		p.MarkAuthFailed(acc.ID)
+		return nil, nil, true
+	case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
+		drain(resp)
+		p.MarkRateLimited(acc.ID, 10*time.Second)
+		return nil, nil, true
+	default:
+		// Non-retriable (400/404/422/deterministic 5xx): return upstream's error
+		// body to the client verbatim (slot freed by the deferred release).
+		return resp, nil, false
+	}
 }
 
 // queueWait is the max time a request may wait for a free concurrency slot.
@@ -161,6 +186,13 @@ func JSONResponse(v any) *http.Response {
 func StreamingResponse(produce func(w io.Writer)) *http.Response {
 	pr, pw := io.Pipe()
 	go func() {
+		// A panic in a translation/stream-parse path must fail this one request,
+		// never crash the whole gateway. CloseWithError ends the client stream.
+		defer func() {
+			if r := recover(); r != nil {
+				_ = pw.CloseWithError(fmt.Errorf("stream produce panic: %v", r))
+			}
+		}()
 		produce(pw)
 		_ = pw.Close()
 	}()
