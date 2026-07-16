@@ -16,13 +16,13 @@ type Event struct {
 	Data  string
 }
 
-// Frames returns an iterator over the SSE frames in r. Iteration stops at EOF
-// or the first read error (a proxy has nothing useful to do with a torn stream).
+// Frames returns an iterator over the SSE frames in r. It uses a bufio.Reader
+// (not Scanner) so there is NO line-length cap — a single huge data: line (e.g.
+// an inline base64 image) is never silently truncated. Iteration stops at EOF.
 // The caller is responsible for closing r.
 func Frames(r io.Reader) iter.Seq[Event] {
 	return func(yield func(Event) bool) {
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024) // allow large data lines
+		br := bufio.NewReader(r)
 		var ev Event
 		var data []string
 		flush := func() bool {
@@ -35,38 +35,48 @@ func Frames(r io.Reader) iter.Seq[Event] {
 			data = data[:0]
 			return ok
 		}
-		for sc.Scan() {
-			line := sc.Text()
-			if line == "" { // blank line terminates a frame
+		for {
+			raw, err := br.ReadString('\n')
+			line := strings.TrimRight(raw, "\r\n")
+			switch {
+			case line == "" && raw != "": // blank line terminates a frame
 				if !flush() {
 					return
 				}
-				continue
+			case line == "": // no data (EOF with empty tail)
+			case strings.HasPrefix(line, ":"): // comment / heartbeat
+			default:
+				field, value, _ := strings.Cut(line, ":")
+				value = strings.TrimPrefix(value, " ")
+				switch field {
+				case "event":
+					ev.Event = value
+				case "data":
+					data = append(data, value)
+				}
 			}
-			if strings.HasPrefix(line, ":") { // comment / heartbeat
-				continue
-			}
-			field, value, _ := strings.Cut(line, ":")
-			value = strings.TrimPrefix(value, " ")
-			switch field {
-			case "event":
-				ev.Event = value
-			case "data":
-				data = append(data, value)
+			if err != nil {
+				flush() // emit a trailing frame that had no closing blank line
+				return
 			}
 		}
-		flush()
 	}
 }
 
 // Lines returns an iterator over the raw newline-delimited lines of r (for
-// NDJSON streams like Grok's, which are not SSE-framed). Stops at EOF/error.
+// NDJSON streams like Grok's, which are not SSE-framed). Uses bufio.Reader so
+// there is no line-length cap. Stops at EOF.
 func Lines(r io.Reader) iter.Seq[string] {
 	return func(yield func(string) bool) {
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-		for sc.Scan() {
-			if !yield(sc.Text()) {
+		br := bufio.NewReader(r)
+		for {
+			raw, err := br.ReadString('\n')
+			if line := strings.TrimRight(raw, "\r\n"); line != "" {
+				if !yield(line) {
+					return
+				}
+			}
+			if err != nil {
 				return
 			}
 		}

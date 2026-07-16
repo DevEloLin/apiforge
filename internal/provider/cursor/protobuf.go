@@ -155,19 +155,22 @@ func readMessage(buf []byte) []protoField {
 	return fields
 }
 
-// extractResponseText pulls the streamed text delta from a
-// StreamUnifiedChatResponseWithTools payload (field 2 -> inner field 1).
+// extractResponseText pulls the streamed text delta(s) from a
+// StreamUnifiedChatResponseWithTools payload (field 2 -> inner field 1). A single
+// Connect frame may batch multiple sub-messages, so ALL text deltas are
+// concatenated (returning only the first would truncate output).
 func extractResponseText(payload []byte) string {
+	var out []byte
 	for _, f := range readMessage(payload) {
 		if f.field == 2 && f.bytes != nil {
 			for _, inner := range readMessage(f.bytes) {
 				if inner.field == 1 && inner.bytes != nil {
-					return string(inner.bytes)
+					out = append(out, inner.bytes...)
 				}
 			}
 		}
 	}
-	return ""
+	return string(out)
 }
 
 // streamDeltas incrementally parses Connect frames from r, invoking onText for
