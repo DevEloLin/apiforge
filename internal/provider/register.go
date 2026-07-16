@@ -12,8 +12,10 @@ import (
 	"apiforge/internal/config"
 	"apiforge/internal/provider/claude"
 	"apiforge/internal/provider/codex"
+	"apiforge/internal/provider/copilot"
 	"apiforge/internal/provider/gemini"
 	"apiforge/internal/provider/openaicompat"
+	"apiforge/internal/provider/qwen"
 	"apiforge/internal/registry"
 	"apiforge/internal/util/ssrf"
 )
@@ -63,7 +65,35 @@ func RegisterAll(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
 	registerCodex(reg, cfg, log)
 	registerClaude(reg, cfg, log)
 	registerGemini(reg, cfg, log)
-	// Phase 5+: qwen / copilot / cursor registered here.
+	registerQwen(reg, cfg, log)
+	registerCopilot(reg, cfg, log)
+	// Phase 6+: cursor registered here.
+}
+
+func registerQwen(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	pc, ok := cfg.Providers["qwen"]
+	if !ok || !pc.Enabled {
+		return
+	}
+	if p := qwen.New(pc.CredentialPaths, qwen.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log); p != nil {
+		reg.Register(p)
+		log.Info("registered qwen-cli", "accounts", p.Pool().Size())
+	}
+}
+
+func registerCopilot(reg *registry.Registry, cfg config.Config, log *slog.Logger) {
+	pc, ok := cfg.Providers["copilot"]
+	if !ok || !pc.Enabled {
+		return
+	}
+	// copilot's credential paths are config dirs; token discovery runs at Init.
+	reg.Register(copilot.New(pc.CredentialPaths, copilot.Config{
+		MaxConcurrency: cfg.MaxAccountConcurrency,
+		StickyTTL:      time.Duration(cfg.StickyTTLSeconds) * time.Second,
+	}, log))
 }
 
 // registerClaude wires the Claude provider from OAuth credential paths plus any

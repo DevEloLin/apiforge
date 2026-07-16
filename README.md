@@ -33,7 +33,7 @@ internal/
 - [ ] P2 openaiCompat + custom (API-key relays)
 - [x] **P3 codex** — CLI OAuth self-refresh + OpenAI API-key accounts; chat (translated OpenAI↔Codex Responses SSE, stream + aggregate), native /responses, images (gen + edits/img2img); account pool retry + concurrency + sticky
 - [x] **P4 claude + gemini** — claude: OAuth self-refresh + API-key; OpenAI↔Anthropic translation (stream+aggregate) + native /messages & count_tokens passthrough + Claude-Code identity injection. gemini-cli (EXPERIMENTAL, `GEMINI_OAUTH_ENABLED`): Google OAuth + Code Assist + OpenAI↔Gemini translation
-- [ ] P5 qwen + copilot
+- [x] **P5 qwen + copilot** — qwen-cli: OAuth self-refresh + per-account base URL from resource_url. copilot: GitHub token→Copilot token exchange (single-flight), live /models with copilot/ prefix, editor fingerprint headers
 - [ ] P6 cursor (protobuf + checksum + state.vscdb); fallback-proxy to TS version if blocked
 - [ ] P7 parity diff vs TS · Dockerfile (scratch) · deploy to Pi + measure RAM
 
