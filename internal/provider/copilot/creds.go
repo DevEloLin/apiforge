@@ -14,6 +14,7 @@ import (
 
 	"apiforge/internal/util/filestore"
 	"apiforge/internal/util/httpx"
+	"apiforge/internal/util/ssrf"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -109,8 +110,13 @@ func (c *creds) exchange(ctx context.Context) (string, error) {
 		return "", err
 	}
 	apiBase := defaultAPIBase
+	// Only honor an upstream-provided endpoint if it's a public address (SSRF guard).
 	if data.Endpoints.API != "" {
-		apiBase = data.Endpoints.API
+		if err := ssrf.AssertPublicURL(data.Endpoints.API, "copilot endpoints.api"); err == nil {
+			apiBase = data.Endpoints.API
+		} else if c.log != nil {
+			c.log.Warn("ignoring non-public copilot endpoint", "err", err)
+		}
 	}
 	// Defensive: if the response omits expires_at, don't leave expiresMs=0 (which
 	// would disable the freshness check and force a token exchange on every

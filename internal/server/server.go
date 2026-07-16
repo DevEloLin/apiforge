@@ -71,7 +71,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 		if d.Ready {
 			ready = append(ready, readyP{ID: d.ID, Models: d.Models})
 		} else {
-			disabled = append(disabled, disabledP{ID: d.ID, Reason: sanitize.Path(d.Reason)})
+			disabled = append(disabled, disabledP{ID: d.ID, Reason: sanitize.Secrets(sanitize.Path(d.Reason))})
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "providers": ready, "disabled": disabled})
@@ -110,7 +110,7 @@ func (s *Server) dispatch(w http.ResponseWriter, r *http.Request, need types.Cap
 	}
 	resp, err := fn(p, rctx, body)
 	if err != nil {
-		s.log.Error("provider error", "provider", p.ID(), "err", err)
+		s.log.Error("provider error", "provider", p.ID(), "err", sanitize.Secrets(err.Error()))
 		s.writeError(w, r, http.StatusBadGateway, "api_error", "Upstream request failed.")
 		return
 	}
@@ -215,7 +215,7 @@ func (s *Server) dispatchImages(w http.ResponseWriter, r *http.Request, req type
 	}
 	resp, err := p.(types.ImagesProvider).Images(rctx, body)
 	if err != nil {
-		s.log.Error("provider error", "provider", p.ID(), "err", err)
+		s.log.Error("provider error", "provider", p.ID(), "err", sanitize.Secrets(err.Error()))
 		s.writeError(w, r, http.StatusBadGateway, "api_error", "Upstream request failed.")
 		return
 	}
@@ -389,11 +389,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// hopByHop headers must not be copied when relaying an upstream response.
+// hopByHop headers must not be copied when relaying an upstream response. The
+// last group also strips upstream identity/session headers that would leak the
+// operator's account/infrastructure to the API caller.
 var hopByHop = map[string]bool{
 	"Connection": true, "Keep-Alive": true, "Proxy-Authenticate": true,
 	"Proxy-Authorization": true, "Te": true, "Trailer": true,
 	"Transfer-Encoding": true, "Upgrade": true, "Content-Length": true,
+	// upstream account / infra leakage
+	"Set-Cookie": true, "Openai-Organization": true, "Cf-Ray": true,
+	"Cf-Cache-Status": true, "X-Request-Id": true, "Server": true,
 }
 
 // writeUpstream streams an upstream response back to the client (status +

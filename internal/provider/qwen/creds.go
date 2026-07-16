@@ -15,6 +15,7 @@ import (
 	"apiforge/internal/token"
 	"apiforge/internal/util/filestore"
 	"apiforge/internal/util/httpx"
+	"apiforge/internal/util/ssrf"
 )
 
 const (
@@ -87,8 +88,23 @@ func (c *creds) Read(_ context.Context) error {
 	if st.AccessToken == "" {
 		return fmt.Errorf("qwen creds missing access_token")
 	}
+	c.sanitizeResourceURL(&st)
 	c.state.Store(&st)
 	return nil
+}
+
+// sanitizeResourceURL drops a resource_url that resolves to a non-public address
+// so the derived per-account base URL can't be steered at an internal host.
+func (c *creds) sanitizeResourceURL(st *credState) {
+	if st.ResourceURL == "" {
+		return
+	}
+	if err := ssrf.AssertPublicURL(deriveEndpoint(st.ResourceURL), "qwen resource_url"); err != nil {
+		if c.log != nil {
+			c.log.Warn("ignoring non-public qwen resource_url", "err", err)
+		}
+		st.ResourceURL = ""
+	}
 }
 
 func (c *creds) Token() string {
@@ -157,6 +173,7 @@ func (c *creds) Refresh(ctx context.Context) (string, error) {
 		next.ResourceURL = data.ResourceURL
 	}
 	next.ExpiryDate = time.Now().UnixMilli() + data.ExpiresIn*1000
+	c.sanitizeResourceURL(&next)
 	if err := filestore.WriteJSONAtomic(c.path, &next); err != nil && c.log != nil {
 		c.log.Warn("could not persist refreshed Qwen token", "err", err)
 	}
