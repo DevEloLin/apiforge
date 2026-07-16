@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"apiforge/internal/config"
+	"apiforge/internal/provider"
 	"apiforge/internal/registry"
 	"apiforge/internal/server"
 )
@@ -33,7 +34,7 @@ func main() {
 	}
 
 	reg := registry.New(log)
-	// Providers are registered here in Phase 2+ (codex/claude/gemini/...).
+	provider.RegisterAll(reg, cfg, log) // vendors + custom relays (Phase 2); CLI providers land in Phase 3+
 	reg.InitAll(context.Background())
 
 	handler := server.New(cfg, reg, log)
