@@ -12,6 +12,10 @@ import (
 // Only the fields we need are encoded/decoded (field numbers recovered from the
 // decompiled client), avoiding a protoc/buf build step.
 
+// maxFrameBytes bounds a single Connect frame payload so a corrupt/desynced
+// 32-bit length prefix can't trigger a multi-GB allocation.
+const maxFrameBytes = 64 << 20
+
 // ---- wire-format writers ---------------------------------------------------
 
 func varint(n uint64) []byte {
@@ -132,10 +136,12 @@ func readMessage(buf []byte) []protoField {
 			fields = append(fields, protoField{field: field, wire: wire, value: val})
 		case 2:
 			l, p2 := readVarintAt(buf, pos)
-			end := p2 + int(l)
-			if end > len(buf) {
+			// Single uint64 compare guards both overflow (bit-63 set → negative int)
+			// and out-of-range, so buf[p2:end] can never panic on a malformed length.
+			if l > uint64(len(buf)-p2) {
 				return fields
 			}
+			end := p2 + int(l)
 			fields = append(fields, protoField{field: field, wire: wire, bytes: buf[p2:end]})
 			pos = end
 		case 5:
@@ -176,6 +182,9 @@ func streamDeltas(r io.Reader, onText func(string)) {
 		}
 		flag := header[0]
 		length := binary.BigEndian.Uint32(header[1:])
+		if length > maxFrameBytes {
+			return // corrupt / desynced frame — abort rather than allocate gigabytes
+		}
 		payload := make([]byte, length)
 		if _, err := io.ReadFull(br, payload); err != nil {
 			return
