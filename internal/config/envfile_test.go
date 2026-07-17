@@ -23,14 +23,12 @@ RALREADY=fromfile
 	}
 	// A real env var must win over the file.
 	t.Setenv("RALREADY", "fromenv")
-	t.Setenv("API_KEYS", "")
 	os.Unsetenv("API_KEYS")
-	t.Setenv("PORT", "")
 	os.Unsetenv("PORT")
-	t.Setenv("QUEUE_WAIT_MS", "")
 	os.Unsetenv("QUEUE_WAIT_MS")
+	protected := RealEnvKeys() // RALREADY is real env here; the file keys are not
 
-	if err := LoadEnvFile(path); err != nil {
+	if err := LoadEnvFile(path, protected); err != nil {
 		t.Fatalf("LoadEnvFile: %v", err)
 	}
 	if got := os.Getenv("API_KEYS"); got != "sk-file" {
@@ -73,7 +71,50 @@ func TestParseValue(t *testing.T) {
 }
 
 func TestLoadEnvFile_Missing(t *testing.T) {
-	if err := LoadEnvFile(filepath.Join(t.TempDir(), "nope.env")); err == nil {
+	if err := LoadEnvFile(filepath.Join(t.TempDir(), "nope.env"), nil); err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestConfigFiles_MainAndDropIns(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "apiforge.env"), []byte("A=1\n"), 0o600)
+	os.MkdirAll(filepath.Join(dir, "conf.d"), 0o700)
+	os.WriteFile(filepath.Join(dir, "conf.d", "20-b.env"), []byte("B=2\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "conf.d", "10-a.env"), []byte("A=override\n"), 0o600)
+
+	files := ConfigFiles(dir)
+	// main first, then conf.d sorted (10- before 20-)
+	if len(files) != 3 ||
+		filepath.Base(files[0]) != "apiforge.env" ||
+		filepath.Base(files[1]) != "10-a.env" ||
+		filepath.Base(files[2]) != "20-b.env" {
+		t.Fatalf("ConfigFiles order = %v", files)
+	}
+}
+
+func TestLoadEnvFile_DropInOverridesButRealEnvWins(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "apiforge.env")
+	drop := filepath.Join(dir, "z.env")
+	os.WriteFile(main, []byte("FOO=frommain\nLOCKED=frommain\n"), 0o600)
+	os.WriteFile(drop, []byte("FOO=fromdropin\nLOCKED=fromdropin\n"), 0o600)
+
+	os.Unsetenv("FOO")
+	t.Setenv("LOCKED", "fromenv") // real env
+	protected := RealEnvKeys()
+
+	// main then drop-in (later wins for non-protected keys).
+	if err := LoadEnvFile(main, protected); err != nil {
+		t.Fatal(err)
+	}
+	if err := LoadEnvFile(drop, protected); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv("FOO"); got != "fromdropin" {
+		t.Errorf("FOO = %q, want fromdropin (later file overrides earlier)", got)
+	}
+	if got := os.Getenv("LOCKED"); got != "fromenv" {
+		t.Errorf("LOCKED = %q, want fromenv (real env beats all files)", got)
 	}
 }

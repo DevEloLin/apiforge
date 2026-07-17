@@ -24,22 +24,37 @@ import (
 )
 
 func main() {
-	// Optional config file (KEY=VALUE) so a plain binary is configurable without
-	// systemd/docker. Precedence: real env > config file. Also honored via the
-	// APIFORGE_ENV_FILE env var (e.g. systemd Environment=).
+	// Configuration comes from the environment. It can also be supplied by a file
+	// or a config DIRECTORY (nginx/haproxy/wireguard style), resolved as:
+	//   -env-file / APIFORGE_ENV_FILE   → that single file (highest)
+	//   -config-dir / APIFORGE_CONFIG_DIR → <dir>/apiforge.env + <dir>/conf.d/*.env
+	//   otherwise auto-discover: /etc/apiforge, ~/.config/apiforge, ~/.apiforge, ./
+	// Precedence: real env > later file (drop-in) > earlier file.
 	envFile := flag.String("env-file", os.Getenv("APIFORGE_ENV_FILE"), "path to a KEY=VALUE config file")
+	configDir := flag.String("config-dir", os.Getenv("APIFORGE_CONFIG_DIR"), "config directory (loads apiforge.env + conf.d/*.env)")
 	flag.Parse()
-	if *envFile != "" {
-		if err := config.LoadEnvFile(*envFile); err != nil {
-			fmt.Fprintf(os.Stderr, "apiforge: cannot load config file %s: %v\n", *envFile, err)
+
+	protected := config.RealEnvKeys() // capture BEFORE loading files so real env wins
+	var files []string
+	switch {
+	case *envFile != "":
+		files = []string{*envFile}
+	case *configDir != "":
+		files = config.ConfigFiles(*configDir)
+	default:
+		files = config.DiscoverConfigFiles()
+	}
+	for _, f := range files {
+		if err := config.LoadEnvFile(f, protected); err != nil {
+			fmt.Fprintf(os.Stderr, "apiforge: cannot load config %s: %v\n", f, err)
 			os.Exit(1)
 		}
 	}
 
 	cfg := config.Load()
 	log := newLogger(cfg.LogLevel)
-	if *envFile != "" {
-		log.Info("loaded config file", "path", "<path>")
+	if len(files) > 0 {
+		log.Info("loaded config", "files", len(files))
 	}
 	// GOMEMLIMIT is normally read by the runtime at process init — too early to
 	// pick up from a -env-file loaded in main(). Re-apply it here so it works

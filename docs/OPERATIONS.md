@@ -60,14 +60,38 @@ When you see `apiforge listening ... ready=[...]`, it started successfully; the 
 | Dockerfile | [`Dockerfile`](../Dockerfile) | build the image |
 | docker-compose | [`docker-compose.yml`](../docker-compose.yml) | `docker compose up -d` |
 
-### Config file (for the binary)
-The binary is env-configured, but can also read a **config file** so it needs neither systemd
-nor Docker:
+### Config file & directory (for the binary)
+The binary is env-configured, but also reads a **config file / directory** (nginx/haproxy/
+wireguard style) so it needs neither systemd nor Docker.
+
+**Standard config directory** — auto-discovered (first one that exists wins):
+
+```
+/etc/apiforge/
+  apiforge.env        # main config (KEY=VALUE); chmod 0600 — it holds secrets
+  conf.d/*.env        # drop-in overrides, loaded after main in sorted order
+  creds/              # copy your CLI login / authorization files here (chmod 0700)
+```
+
+Search order: `$APIFORGE_CONFIG_DIR` → `/etc/apiforge` → `~/.config/apiforge` → `~/.apiforge`
+→ `./apiforge.env` (or `./.apiforge.env`). So a systemd/`/etc/apiforge` install "just works"
+with a bare `apiforge` (no flags). Force a location:
 
 ```bash
-apiforge -env-file /etc/apiforge/apiforge.env           # flag
-APIFORGE_ENV_FILE=/etc/apiforge/apiforge.env apiforge   # or env var
+apiforge                                    # auto-discover
+apiforge -config-dir /etc/apiforge          # a directory (apiforge.env + conf.d/*.env)
+apiforge -env-file /path/apiforge.env       # a single file
+APIFORGE_CONFIG_DIR=/etc/apiforge apiforge  # env equivalents
+APIFORGE_ENV_FILE=/path/apiforge.env apiforge
 ```
+
+**Precedence:** real env var > later file (drop-in) > earlier file. So `docker -e` / systemd
+`Environment=` / a shell export always beats the file, and `conf.d/` overrides `apiforge.env`.
+
+**Credential/authorization files:** keep the copied CLI login files under `creds/` (like
+wireguard keeps keys in `/etc/wireguard`) and point `*_AUTHS` at them, e.g.
+`CODEX_AUTHS=/etc/apiforge/creds/codex/auth.json`. Because `creds/` is inside `/etc/apiforge`
+(already in the unit's `ReadWritePaths`), OAuth token write-back works with the default service.
 
 Format (keys = the §4 variables):
 - one `KEY=VALUE` per line; blank lines and lines starting with `#` are ignored;
@@ -335,7 +359,7 @@ sudo $EDITOR /etc/systemd/system/apiforge.service            # set User= + uncom
 sudo systemctl daemon-reload && sudo systemctl enable --now apiforge
 ```
 
-Config lives in `/etc/apiforge/apiforge.env` (the unit runs `apiforge -env-file /etc/apiforge/apiforge.env`;
+Config lives in `/etc/apiforge/apiforge.env` (the unit runs a bare `apiforge`, which auto-discovers `/etc/apiforge`;
 keys are the §4 variables). Two things to get right in [`deploy/apiforge.service`](../deploy/apiforge.service):
 
 - **`User=`** must be the account whose CLI logins you reuse (so it can read the credential files).

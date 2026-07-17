@@ -4,23 +4,83 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// LoadEnvFile loads KEY=VALUE lines from path into the process environment so a
-// plain binary can be configured from a file (no systemd/docker required).
+const configFileName = "apiforge.env"
+
+// RealEnvKeys snapshots the keys already in the process environment, so a
+// file-loaded value never overrides a real (shell / docker -e / systemd
+// Environment=) variable. Capture this BEFORE loading any config file.
+func RealEnvKeys() map[string]bool {
+	keys := make(map[string]bool)
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok {
+			keys[k] = true
+		}
+	}
+	return keys
+}
+
+// ConfigFiles returns the env files to load for a config directory (nginx-style):
+// the main apiforge.env (if present) followed by conf.d/*.env in sorted order.
+// Only existing files are returned.
+func ConfigFiles(dir string) []string {
+	var out []string
+	if main := filepath.Join(dir, configFileName); fileExists(main) {
+		out = append(out, main)
+	}
+	drop, _ := filepath.Glob(filepath.Join(dir, "conf.d", "*.env"))
+	sort.Strings(drop)
+	out = append(out, drop...)
+	return out
+}
+
+// DiscoverConfigFiles searches standard locations (like nginx/haproxy/wireguard
+// use /etc/<name>/) and returns the env files from the FIRST directory that has a
+// config, or nil if none. Search order:
 //
-// Format:
-//   - one KEY=VALUE per line; blank lines and lines starting with '#' are ignored;
+//	$APIFORGE_CONFIG_DIR  →  /etc/apiforge  →  $XDG_CONFIG_HOME/apiforge
+//	(~/.config/apiforge)  →  ~/.apiforge  →  ./apiforge.env or ./.apiforge.env
+func DiscoverConfigFiles() []string {
+	var dirs []string
+	if d := os.Getenv("APIFORGE_CONFIG_DIR"); d != "" {
+		dirs = append(dirs, d)
+	}
+	dirs = append(dirs, "/etc/apiforge", filepath.Join(configHome(), "apiforge"))
+	if h := home(); h != "" {
+		dirs = append(dirs, filepath.Join(h, ".apiforge"))
+	}
+	for _, d := range dirs {
+		if files := ConfigFiles(d); len(files) > 0 {
+			return files
+		}
+	}
+	// Current-directory fallback (dev convenience), including the hidden dotfile.
+	for _, f := range []string{configFileName, "." + configFileName} {
+		if fileExists(f) {
+			return []string{f}
+		}
+	}
+	return nil
+}
+
+func fileExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
+}
+
+// LoadEnvFile loads KEY=VALUE lines from path into the process environment.
+//
+//   - blank lines and lines starting with '#' are ignored;
 //   - an optional leading `export ` is accepted;
-//   - INLINE comments are supported: for an unquoted value, a '#' preceded by
-//     whitespace starts a comment (e.g. `PORT=8899   # the port` → "8899");
-//   - single/double quotes around a value are stripped and preserve inner spaces
-//     and '#' (quote a value that must contain a literal '#' or trailing spaces).
-//
-// A real environment variable that is ALREADY set takes precedence (so a
-// `docker -e` / shell env value overrides the file).
-func LoadEnvFile(path string) error {
+//   - inline `#comment` (preceded by whitespace) is stripped from unquoted values;
+//   - single/double quotes are stripped, preserving inner spaces and '#';
+//   - a key in `protected` is left untouched (real env wins); otherwise the file
+//     value is set, OVERWRITING a value from an earlier file (later drop-ins win).
+func LoadEnvFile(path string, protected map[string]bool) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -45,7 +105,7 @@ func LoadEnvFile(path string) error {
 		if key == "" {
 			return fmt.Errorf("%s:%d: empty key", path, ln)
 		}
-		if _, present := os.LookupEnv(key); present {
+		if protected[key] {
 			continue // real env wins over the file
 		}
 		if err := os.Setenv(key, parseValue(rawVal)); err != nil {
@@ -69,7 +129,6 @@ func parseValue(raw string) string {
 		}
 		return v[1:] // unterminated quote — best effort
 	}
-	// Unquoted: a whole-value comment, or an inline ` #comment`.
 	if v[0] == '#' {
 		return ""
 	}

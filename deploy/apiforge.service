@@ -11,7 +11,9 @@ Type=simple
 # uses that user's primary group, avoiding a "group not found" failure.)
 User=apiforge
 
-ExecStart=/usr/local/bin/apiforge -env-file /etc/apiforge/apiforge.env
+# apiforge auto-discovers /etc/apiforge/apiforge.env + /etc/apiforge/conf.d/*.env
+# (nginx-style). Pin explicitly with: ExecStart=/usr/local/bin/apiforge -config-dir /etc/apiforge
+ExecStart=/usr/local/bin/apiforge
 Restart=on-failure
 RestartSec=3
 
