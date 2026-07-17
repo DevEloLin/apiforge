@@ -226,10 +226,17 @@ Inside the image the defaults are `HOST=0.0.0.0`, `PORT=8899`, `GOMEMLIMIT=64MiB
 The `scratch` image **has no `/root` home directory and no `/etc/passwd`**, so auto-detecting things like `~/.codex`
 **does not work inside the container**. Two correct approaches (pick either):
 
+> **⚠️ uid matters.** The image runs as uid `65532`, but your host credential files are usually
+> `0600` owned by your login uid. A bind mount checks permission by uid number, so the container
+> **can't read (or write-back) them** unless you run it **as the credential owner's uid**:
+> add `--user "$(id -u):$(id -g)"` (below). This is required for reading, and for OAuth token
+> write-back.
+
 **A. Explicit paths (recommended)** — mount the credential directory and point `*_AUTHS` at the mount point:
 ```bash
 docker run -d --name apiforge \
   -p 127.0.0.1:8899:8899 \
+  --user "$(id -u):$(id -g)" \
   -e API_KEYS=sk-my-secret \
   -e CODEX_AUTHS=/creds/codex/auth.json \
   -e CLAUDE_AUTHS=/creds/claude/.credentials.json \
@@ -250,9 +257,8 @@ docker run -d --name apiforge \
 
 > **Read-write permission**: after an OAuth refresh, apiforge **atomically writes the new token back** to the credential file to stay
 > in sync with the CLI. If you use a `:ro` read-only mount, the refresh still takes effect in memory but cannot be persisted (a warn
-> appears in the log, and once the token expires you must supply it again). To persist, use a **writable** mount (drop `:ro`), and make
-> sure the container uid `65532` can write to that directory
-> (or add `--user 0:0` to run as root — trading least-privilege for convenience).
+> appears in the log, and once the token expires you must supply it again). To persist, use a **writable** mount (drop `:ro`) and run as
+> the credential owner's uid (`--user "$(id -u):$(id -g)"`, as above) so the container can write the directory.
 
 ### 6.2 Environment-Variable-Only Sources (No Mount Needed)
 grok-web / cursor / each vendor's keys use environment variables only, with no volume needed:

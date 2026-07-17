@@ -7,9 +7,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 # Run as the user whose CLI logins apiforge reuses (so it can read AND write-back
-# refreshed tokens). Change this to that user, e.g. User=devops.
+# refreshed tokens). Change this to that user, e.g. User=devops. (No Group= — systemd
+# uses that user's primary group, avoiding a "group not found" failure.)
 User=apiforge
-Group=apiforge
 
 ExecStart=/usr/local/bin/apiforge -env-file /etc/apiforge/apiforge.env
 Restart=on-failure
