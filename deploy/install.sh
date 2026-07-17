@@ -24,9 +24,18 @@ if [ ! -f /etc/apiforge/apiforge.env ]; then
 else
   echo "/etc/apiforge/apiforge.env exists — left untouched"
 fi
+# The service runs as $USER_NAME, so it must be able to READ the config (0600
+# root:root would be unreadable to it). Own the file by the service user, keep 0600
+# (it holds API_KEYS/secrets — not world-readable).
+if id "$USER_NAME" >/dev/null 2>&1; then
+  chown "$USER_NAME" /etc/apiforge/apiforge.env
+  chmod 0600 /etc/apiforge/apiforge.env
+else
+  echo "WARNING: user '$USER_NAME' does not exist — create it, or the service won't start"
+fi
 
-# Install unit with the chosen User=.
-sed "s/^User=apiforge/User=${USER_NAME}/; s/^Group=apiforge/Group=${USER_NAME}/" \
+# Install unit with the chosen User= (Group defaults to that user's primary group).
+sed "s/^User=apiforge/User=${USER_NAME}/" \
   "$HERE/apiforge.service" > /etc/systemd/system/apiforge.service
 systemctl daemon-reload
 

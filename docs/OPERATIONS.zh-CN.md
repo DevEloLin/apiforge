@@ -225,10 +225,15 @@ docker build -f Dockerfile.prebuilt -t apiforge:arm64 .
 `scratch` 镜像**没有 `/root` 家目录、没有 `/etc/passwd`**，所以自动探测 `~/.codex` 之类
 **在容器里不生效**。两种正确做法（任选）：
 
+> **⚠️ uid 很关键。** 镜像以 uid `65532` 运行，而宿主机凭据文件通常是属主为你登录 uid 的 `0600`。
+> bind mount 按 uid 号判权限，所以容器**读不到（也写不回）**这些文件，除非**以凭据属主的 uid 运行**：
+> 加 `--user "$(id -u):$(id -g)"`（见下）。读凭据和 OAuth token 回写都需要这一步。
+
 **A. 显式路径（推荐）** —— 挂载凭据目录并用 `*_AUTHS` 指到挂载点：
 ```bash
 docker run -d --name apiforge \
   -p 127.0.0.1:8899:8899 \
+  --user "$(id -u):$(id -g)" \
   -e API_KEYS=sk-my-secret \
   -e CODEX_AUTHS=/creds/codex/auth.json \
   -e CLAUDE_AUTHS=/creds/claude/.credentials.json \
@@ -249,8 +254,8 @@ docker run -d --name apiforge \
 
 > **读写权限**：OAuth 刷新后 apiforge 会把新 token **原子写回**凭据文件，以便与 CLI 保持
 > 同步。若用 `:ro` 只读挂载，刷新仍在内存生效但无法落盘（日志出现 warn，token 过期后需
-> 重新提供）。想持久化就用**可写**挂载（去掉 `:ro`），并确保容器 uid `65532` 对该目录可写
-> （或加 `--user 0:0` 以 root 运行——牺牲最小权限换便利）。
+> 重新提供）。想持久化就用**可写**挂载（去掉 `:ro`），并以凭据属主的 uid 运行
+> （`--user "$(id -u):$(id -g)"`，同上），容器才能写该目录。
 
 ### 6.2 纯环境变量来源（无需挂载）
 grok-web / cursor / 各厂商 key 只用环境变量，无需挂卷：

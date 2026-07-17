@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,6 +41,10 @@ func main() {
 	if *envFile != "" {
 		log.Info("loaded config file", "path", "<path>")
 	}
+	// GOMEMLIMIT is normally read by the runtime at process init — too early to
+	// pick up from a -env-file loaded in main(). Re-apply it here so it works
+	// whether supplied as a real env var (idempotent) or via the config file.
+	applyMemLimit(os.Getenv("GOMEMLIMIT"), log)
 
 	// Fail closed: refuse to run an unauthenticated gateway on a non-loopback
 	// bind, which would expose the operator's subscriptions to the network.
@@ -81,6 +86,41 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+}
+
+// applyMemLimit honors GOMEMLIMIT even when it arrives via the -env-file (after
+// the runtime already read the process env). "off"/empty/invalid are ignored.
+func applyMemLimit(v string, log *slog.Logger) {
+	v = strings.TrimSpace(v)
+	if v == "" || v == "off" {
+		return
+	}
+	n, err := parseMemLimit(v)
+	if err != nil {
+		log.Warn("ignoring invalid GOMEMLIMIT", "value", v, "err", err)
+		return
+	}
+	debug.SetMemoryLimit(n)
+}
+
+// parseMemLimit parses the GOMEMLIMIT format: a number with an optional
+// B/KiB/MiB/GiB/TiB (power-of-1024) suffix; a bare number is bytes.
+func parseMemLimit(s string) (int64, error) {
+	units := []struct {
+		suffix string
+		mul    int64
+	}{{"TiB", 1 << 40}, {"GiB", 1 << 30}, {"MiB", 1 << 20}, {"KiB", 1 << 10}, {"B", 1}}
+	for _, u := range units {
+		if strings.HasSuffix(s, u.suffix) {
+			num := strings.TrimSpace(strings.TrimSuffix(s, u.suffix))
+			f, err := strconv.ParseFloat(num, 64)
+			if err != nil {
+				return 0, err
+			}
+			return int64(f * float64(u.mul)), nil
+		}
+	}
+	return strconv.ParseInt(s, 10, 64)
 }
 
 func newLogger(level string) *slog.Logger {

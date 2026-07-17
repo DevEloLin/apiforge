@@ -6,6 +6,11 @@ services:
     build: .                       # or: image: ghcr.io/develolin/apiforge:latest
     container_name: apiforge
     restart: unless-stopped
+    # The scratch image runs as uid 65532; your host credential files are usually
+    # 0600 owned by your login uid, so run the container AS that uid or it can't
+    # read/write them. Set to the credential owner's `id -u`:`id -g` (Pi/Debian
+    # first user is typically 1000). Override: APIFORGE_UID=… APIFORGE_GID=… docker compose up
+    user: "${APIFORGE_UID:-1000}:${APIFORGE_GID:-1000}"
     ports:
       - "127.0.0.1:8899:8899"
     environment:
