@@ -17,19 +17,26 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 [ -f "$BIN" ] || { echo "binary not found: $BIN (build with deploy/build.sh)"; exit 1; }
 
 install -m 0755 "$BIN" /usr/local/bin/apiforge
+
+# Standard config directory (nginx/haproxy/wireguard style):
+#   /etc/apiforge/apiforge.env   main config (0600, secrets)
+#   /etc/apiforge/conf.d/*.env   drop-in overrides
+#   /etc/apiforge/creds/         copied CLI login / authorization files (0700)
 install -d -m 0755 /etc/apiforge
+install -d -m 0755 /etc/apiforge/conf.d
+install -d -m 0700 /etc/apiforge/creds
 if [ ! -f /etc/apiforge/apiforge.env ]; then
   install -m 0600 "$HERE/apiforge.env.example" /etc/apiforge/apiforge.env
   echo "seeded /etc/apiforge/apiforge.env — EDIT IT (set API_KEYS, credential paths) before starting"
 else
   echo "/etc/apiforge/apiforge.env exists — left untouched"
 fi
-# The service runs as $USER_NAME, so it must be able to READ the config (0600
-# root:root would be unreadable to it). Own the file by the service user, keep 0600
-# (it holds API_KEYS/secrets — not world-readable).
+# The service runs as $USER_NAME, so it must READ the config and READ/WRITE creds
+# (token refresh writes back). Own them by the service user; keep the secret file 0600.
 if id "$USER_NAME" >/dev/null 2>&1; then
-  chown "$USER_NAME" /etc/apiforge/apiforge.env
+  chown -R "$USER_NAME" /etc/apiforge
   chmod 0600 /etc/apiforge/apiforge.env
+  chmod 0700 /etc/apiforge/creds
 else
   echo "WARNING: user '$USER_NAME' does not exist — create it, or the service won't start"
 fi
@@ -42,8 +49,12 @@ systemctl daemon-reload
 cat <<EOF
 
 installed. next:
-  1. sudo \$EDITOR /etc/apiforge/apiforge.env      # set API_KEYS + *_AUTHS paths
-  2. in the unit, uncomment ReadWritePaths for the credential dirs (token write-back)
+  1. copy your CLI login files into /etc/apiforge/creds/, e.g.:
+       sudo cp -r ~/.codex /etc/apiforge/creds/codex && sudo chown -R ${USER_NAME} /etc/apiforge/creds
+     (keeping them here means token write-back works with the default unit —
+      /etc/apiforge is already in ReadWritePaths. To instead use logins in a home
+      dir, uncomment the home ReadWritePaths line in the unit.)
+  2. sudo \$EDITOR /etc/apiforge/apiforge.env      # set API_KEYS + *_AUTHS paths (e.g. /etc/apiforge/creds/codex/auth.json)
   3. sudo systemctl enable --now apiforge
   4. journalctl -u apiforge -f
 EOF
