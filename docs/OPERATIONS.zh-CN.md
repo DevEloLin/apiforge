@@ -365,17 +365,20 @@ docker compose up -d --build && docker compose logs -f
 
 配置文件、unit、脚本仓库都已提供，无需手写。
 
-**一键安装（在目标机上）：**
+**一键安装（在目标机上）：** 装二进制、生成默认 `/etc/apiforge/apiforge.env`、装 unit,并**自动
+`systemctl enable`**(开机自启 + 纳入 systemctl 管理)。默认配置已能在 `127.0.0.1` 起;填好自己的
+key/凭据后启动即可。
 ```bash
 # 1. 拿到静态二进制（在任意装了 Go 的机器上构建，再 scp 到目标机）：
 deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 
-# 2. 目标机上以 root 运行——装二进制 + /etc/apiforge/apiforge.env + unit：
-sudo deploy/install.sh dist/apiforge-linux-arm64 devops   # 第 2 个参数=服务用户
+# 2. 目标机上以 root 运行——装 + enable 服务（加 --now 可顺带立即启动）：
+sudo deploy/install.sh dist/apiforge-linux-arm64 devops        # 第 2 个参数=服务用户
+#   sudo deploy/install.sh dist/apiforge-linux-arm64 devops --now
 
-# 3. 改配置后启动：
+# 3. 填好 key/凭据后启动：
 sudo $EDITOR /etc/apiforge/apiforge.env   # 填 API_KEYS + *_AUTHS 路径
-sudo systemctl enable --now apiforge
+sudo systemctl start apiforge
 journalctl -u apiforge -f
 ```
 
@@ -395,7 +398,15 @@ sudo systemctl daemon-reload && sudo systemctl enable --now apiforge
 - **`User=`** 必须是你复用其 CLI 登录的账户（否则读不到凭据文件）。
 - **`ReadWritePaths=`** 必须包含凭据目录（如 `/home/<用户>/.codex`），否则刷新后的 OAuth token 无法写回。
 
-常用命令：`systemctl restart apiforge`（换二进制后）、`systemctl status apiforge`、`journalctl -u apiforge -f`（日志）。
+像普通服务一样管理：
+```bash
+sudo systemctl start   apiforge      # 启动（默认配置开箱即可在 127.0.0.1 起）
+sudo systemctl status  apiforge      # 是否在跑
+sudo systemctl restart apiforge      # 改完配置 / 换二进制后
+sudo systemctl stop    apiforge
+sudo systemctl enable  apiforge      # 开机自启（install.sh 已做）
+journalctl -u apiforge -f            # 跟随日志
+```
 
 ---
 

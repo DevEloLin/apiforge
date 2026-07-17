@@ -45,16 +45,28 @@ fi
 sed "s/^User=apiforge/User=${USER_NAME}/" \
   "$HERE/apiforge.service" > /etc/systemd/system/apiforge.service
 systemctl daemon-reload
+systemctl enable apiforge >/dev/null 2>&1 || true   # register for boot / systemctl management
+
+# Optional: also start now (default config starts on 127.0.0.1 out of the box).
+if [ "${3:-}" = "--now" ] || [ "${START_NOW:-}" = "1" ]; then
+  systemctl start apiforge && echo "started (systemctl status apiforge)"
+fi
 
 cat <<EOF
 
-installed. next:
+installed & enabled (starts on boot). The default config in /etc/apiforge/apiforge.env
+already starts on 127.0.0.1 — but set your own API_KEYS and add credentials first:
+
   1. copy your CLI login files into /etc/apiforge/creds/, e.g.:
        sudo cp -r ~/.codex /etc/apiforge/creds/codex && sudo chown -R ${USER_NAME} /etc/apiforge/creds
      (keeping them here means token write-back works with the default unit —
-      /etc/apiforge is already in ReadWritePaths. To instead use logins in a home
-      dir, uncomment the home ReadWritePaths line in the unit.)
-  2. sudo \$EDITOR /etc/apiforge/apiforge.env      # set API_KEYS + *_AUTHS paths (e.g. /etc/apiforge/creds/codex/auth.json)
-  3. sudo systemctl enable --now apiforge
-  4. journalctl -u apiforge -f
+      /etc/apiforge is already in ReadWritePaths.)
+  2. sudo \$EDITOR /etc/apiforge/apiforge.env      # set API_KEYS + *_AUTHS (e.g. /etc/apiforge/creds/codex)
+
+Manage with systemctl:
+  sudo systemctl start   apiforge     # start now (or re-run this installer with --now)
+  sudo systemctl status  apiforge
+  sudo systemctl restart apiforge     # after editing config / replacing the binary
+  sudo systemctl stop    apiforge
+  journalctl -u apiforge -f           # logs
 EOF
