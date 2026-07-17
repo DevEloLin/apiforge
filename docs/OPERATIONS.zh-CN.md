@@ -61,14 +61,21 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 | docker-compose | [`docker-compose.yml`](../docker-compose.yml) | `docker compose up -d` |
 
 ### 配置文件（二进制用）
-二进制走环境变量配置，也可读**配置文件**（`KEY=VALUE`、`#` 注释、可选 `export `、自动去引号），
-从而无需 systemd 或 Docker：
+二进制走环境变量配置，也可读**配置文件**，从而无需 systemd 或 Docker：
 
 ```bash
 apiforge -env-file /etc/apiforge/apiforge.env          # 标志
 APIFORGE_ENV_FILE=/etc/apiforge/apiforge.env apiforge  # 或环境变量
 ```
-真实环境变量优先级高于文件里的值。模板见 [`deploy/apiforge.env.example`](../deploy/apiforge.env.example)（完整键见 §4）。
+
+格式（键即 §4 变量）：
+- 每行一个 `KEY=VALUE`；空行与以 `#` 开头的行忽略；
+- 可选前缀 `export `；
+- **行内注释**：未加引号的值里，前面有空格的 `#` 起注释（`PORT=8899   # 端口` → `8899`）；
+- 值里要保留空格或字面 `#`，请**加引号**（`X="a#b c"` → `a#b c`）；
+- 真实环境变量（shell / `docker -e` / systemd `Environment=`）**优先级高于**文件值。
+
+模板见 [`deploy/apiforge.env.example`](../deploy/apiforge.env.example)。
 
 ---
 
