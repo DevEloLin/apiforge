@@ -5,6 +5,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -144,6 +145,38 @@ func resolveCreds(listEnv, singleEnv string, candidates []string) []string {
 	return selectExisting(candidates)
 }
 
+// expandCredDirs turns any directory in paths into the *.json files inside it
+// (sorted) — so a creds directory holds one auth file per account (directory-based
+// multi-account). Non-directory and non-existent paths are kept as-is.
+func expandCredDirs(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			files, _ := filepath.Glob(filepath.Join(p, "*.json")) // matches .credentials.json too (Go glob '*' spans leading dot)
+			sort.Strings(files)
+			out = append(out, files...)
+			continue
+		}
+		out = append(out, p)
+	}
+	return uniq(out)
+}
+
+// credsDirCandidates lists the standard creds/<provider>/ directories (a bare
+// install can then auto-discover accounts dropped there, no *_AUTHS needed).
+func credsDirCandidates(provider string) []string {
+	var out []string
+	if d := os.Getenv("APIFORGE_CONFIG_DIR"); d != "" {
+		out = append(out, filepath.Join(d, "creds", provider))
+	}
+	out = append(out,
+		filepath.Join("/etc/apiforge/creds", provider),
+		filepath.Join(configHome(), "apiforge", "creds", provider),
+		filepath.Join(home(), ".apiforge", "creds", provider),
+	)
+	return out
+}
+
 // Load resolves the full configuration from the environment.
 func Load() Config {
 	h, ch := home(), configHome()
@@ -157,10 +190,21 @@ func Load() Config {
 		"gemini":  {filepath.Join(h, ".gemini", "oauth_creds.json"), filepath.Join(ch, "gemini", "oauth_creds.json")},
 	}
 
+	// Providers whose account = one credential FILE support directory-based
+	// multi-account: a creds/<provider>/ dir with one *.json per account.
+	fileAccount := map[string]bool{"codex": true, "claude": true, "qwen": true, "gemini": true}
+
 	providers := map[string]ProviderConfig{}
 	for _, name := range []string{"codex", "claude", "copilot", "cursor", "qwen", "gemini"} {
 		up := strings.ToUpper(name)
-		paths := resolveCreds(up+"_AUTHS", up+"_AUTH", candidates[name])
+		cands := candidates[name]
+		if fileAccount[name] {
+			cands = append(credsDirCandidates(name), cands...) // prefer creds/<provider>/
+		}
+		paths := resolveCreds(up+"_AUTHS", up+"_AUTH", cands)
+		if fileAccount[name] {
+			paths = expandCredDirs(paths) // a dir → one *.json per account
+		}
 		providers[name] = ProviderConfig{
 			// enabled unless explicitly disabled; auto-detect drives real readiness at init.
 			Enabled:         envBool(up+"_ENABLED", true),
