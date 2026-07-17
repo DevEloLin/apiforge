@@ -127,7 +127,17 @@ cd apiforge
 API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 ```
 
-### Option 2 — Docker (scratch image, ~7 MB)
+### Option 2 — compiled binary (single file, no deps)
+
+```bash
+deploy/build.sh linux/arm64                 # → dist/apiforge-linux-arm64 (or: go build -o apiforge ./cmd/apiforge)
+API_KEYS=sk-my-secret ./apiforge            # env vars …
+./apiforge -config-dir /etc/apiforge        # … or a config dir (apiforge.env + conf.d/*.env); bare = auto-discover
+```
+Configure via env vars, a `-env-file`, or a `-config-dir`; run it under systemd for autostart.
+See [OPERATIONS.md](./docs/OPERATIONS.md).
+
+### Option 3 — Docker (scratch image, ~7 MB)
 
 ```bash
 docker build -t apiforge .

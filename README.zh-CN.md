@@ -122,7 +122,17 @@ cd apiforge
 API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 ```
 
-### 方式二：Docker（scratch 镜像，约 7MB）
+### 方式二：编译好的二进制（单文件，无依赖）
+
+```bash
+deploy/build.sh linux/arm64                 # → dist/apiforge-linux-arm64（或：go build -o apiforge ./cmd/apiforge）
+API_KEYS=sk-my-secret ./apiforge            # 环境变量……
+./apiforge -config-dir /etc/apiforge        # ……或配置目录（apiforge.env + conf.d/*.env）；裸跑=自动发现
+```
+配置可用环境变量、`-env-file` 或 `-config-dir`；开机自启用 systemd 跑。详见
+[操作手册](./docs/OPERATIONS.zh-CN.md)。
+
+### 方式三：Docker（scratch 镜像，约 7MB）
 
 ```bash
 docker build -t apiforge .

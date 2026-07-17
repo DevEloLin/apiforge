@@ -49,6 +49,28 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 
 看到 `apiforge listening ... ready=[...]` 即成功；`ready` 列表是探测到并初始化成功的来源。
 
+### 直接用编译好的二进制（单文件）
+单个自包含二进制，无运行时依赖。先构建（或放入 release 二进制），然后三选一方式运行：
+
+```bash
+# 1) 构建静态二进制（任意装了 Go 的机器，可交叉编译）：
+deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
+#   或直接：  go build -o apiforge ./cmd/apiforge
+
+# 2) 运行 —— 配置方式三选一：
+API_KEYS=sk-my-secret ./apiforge                       # a) 环境变量（本机回环调试）
+./apiforge -env-file ./apiforge.env                    # b) 配置文件
+./apiforge -config-dir /etc/apiforge                   # c) 配置目录（apiforge.env + conf.d/*.env）
+./apiforge                                             # d) 不带参数 → 自动发现 /etc/apiforge、~/.config/apiforge、~/.apiforge、./
+
+# 3) 验证：
+curl -s http://127.0.0.1:8899/health
+```
+
+标志：`-env-file <文件>`、`-config-dir <目录>`（也可用 `APIFORGE_ENV_FILE` / `APIFORGE_CONFIG_DIR`）。
+服务器/树莓派上要开机自启与重启，请用 **systemd**（§8）跑，别手动挂后台。
+配置项与文件格式见下（§4 及下一小节）。
+
 **仓库已提供现成的部署产物：**
 
 | 产物 | 路径 | 用途 |
