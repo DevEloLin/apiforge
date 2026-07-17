@@ -1,0 +1,33 @@
+[Unit]
+Description=apiforge — unified OpenAI/Anthropic-compatible AI gateway
+Documentation=https://github.com/DevEloLin/apiforge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as the user whose CLI logins apiforge reuses (so it can read AND write-back
+# refreshed tokens). Change this to that user, e.g. User=devops.
+User=apiforge
+Group=apiforge
+
+ExecStart=/usr/local/bin/apiforge -env-file /etc/apiforge/apiforge.env
+Restart=on-failure
+RestartSec=3
+
+# ── Resource limit (comfortable on a 1 GB Pi) ──
+MemoryMax=128M
+
+# ── Hardening ──
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+# Paths apiforge must WRITE: the config dir is harmless; the credential dirs need
+# write access so rotated OAuth tokens persist. Uncomment + point at the real
+# home of the User above (must match wherever the *_AUTHS files live):
+ReadWritePaths=/etc/apiforge
+# ReadWritePaths=/home/devops/.codex /home/devops/.claude /home/devops/.qwen
+
+[Install]
+WantedBy=multi-user.target

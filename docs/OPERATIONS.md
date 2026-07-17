@@ -49,6 +49,28 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 
 When you see `apiforge listening ... ready=[...]`, it started successfully; the `ready` list contains the sources that were detected and initialized successfully.
 
+**Ready-to-use deployment artifacts are provided in the repo:**
+
+| Artifact | Path | Use |
+|---|---|---|
+| Config file template | [`deploy/apiforge.env.example`](../deploy/apiforge.env.example) | binary / systemd config |
+| systemd unit | [`deploy/apiforge.service`](../deploy/apiforge.service) | run as a service |
+| Multi-arch build script | [`deploy/build.sh`](../deploy/build.sh) | produce static binaries |
+| systemd install script | [`deploy/install.sh`](../deploy/install.sh) | one-shot install |
+| Dockerfile | [`Dockerfile`](../Dockerfile) | build the image |
+| docker-compose | [`docker-compose.yml`](../docker-compose.yml) | `docker compose up -d` |
+
+### Config file (for the binary)
+The binary is env-configured, but can also read a **config file** (`KEY=VALUE`, `#` comments,
+optional `export `, quotes stripped) so it needs neither systemd nor Docker:
+
+```bash
+apiforge -env-file /etc/apiforge/apiforge.env      # flag
+APIFORGE_ENV_FILE=/etc/apiforge/apiforge.env apiforge   # or env var
+```
+A real environment variable overrides a value in the file. Template:
+[`deploy/apiforge.env.example`](../deploy/apiforge.env.example) (full key reference in §4).
+
 ---
 
 ## 3. Preparing Login Credentials for Each Source
@@ -261,69 +283,53 @@ docker run -d --name apiforge -p 127.0.0.1:8899:8899 --env-file my.env \
 
 ## 7. docker-compose
 
-```yaml
-# docker-compose.yml
-services:
-  apiforge:
-    build: .                       # 或 image: apiforge:latest
-    container_name: apiforge
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8899:8899"      # 只对本机；对外走反代
-    environment:
-      API_KEYS: "sk-my-secret"
-      ADMIN_TOKEN: "admin-secret"
-      MAX_ACCOUNT_CONCURRENCY: "3"
-      QUEUE_WAIT_MS: "60000"
-      GOMEMLIMIT: "64MiB"
-      CODEX_AUTHS: "/creds/codex/auth.json"
-      CLAUDE_AUTHS: "/creds/claude/.credentials.json"
-      # DEEPSEEK_API_KEYS: "sk-xxx"
-      # GROK_COOKIES: "sso=eyJ..."
-    volumes:
-      - "${HOME}/.codex:/creds/codex"          # 可写以持久化刷新后的 token
-      - "${HOME}/.claude:/creds/claude"
-    mem_limit: 128m
-```
+A ready [`docker-compose.yml`](../docker-compose.yml) is in the repo root — edit its `environment:`
+(set `API_KEYS`, credential paths) and `volumes:` (mount credential dirs **writable**, no `:ro`, so
+refreshed tokens persist), then:
+
 ```bash
-docker compose up -d && docker compose logs -f
+docker compose up -d --build && docker compose logs -f
 ```
 
 ---
 
 ## 8. Bare Binary + systemd (Lowest Memory, Recommended for Raspberry Pi)
 
+The repo ships the config file, unit, and scripts — you don't hand-write them.
+
+**One-shot install (on the target host):**
 ```bash
-# 目标机上放好二进制 /opt/apiforge/apiforge 与 /opt/apiforge/apiforge.env
-sudo tee /etc/systemd/system/apiforge.service >/dev/null <<'EOF'
-[Unit]
-Description=apiforge gateway
-After=network-online.target
-Wants=network-online.target
+# 1. Get a static binary (build on any machine with Go, then scp to the target):
+deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 
-[Service]
-Type=simple
-User=devops
-EnvironmentFile=/opt/apiforge/apiforge.env
-ExecStart=/opt/apiforge/apiforge
-Restart=on-failure
-RestartSec=3
-# 内存/安全加固
-MemoryMax=128M
-NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths=/home/devops/.codex /home/devops/.claude
-ProtectHome=read-only
+# 2. On the target, as root — installs binary + /etc/apiforge/apiforge.env + the unit:
+sudo deploy/install.sh dist/apiforge-linux-arm64 devops   # 2nd arg = service user
 
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemctl daemon-reload
+# 3. Edit config, then start:
+sudo $EDITOR /etc/apiforge/apiforge.env   # set API_KEYS + *_AUTHS paths
 sudo systemctl enable --now apiforge
 journalctl -u apiforge -f
 ```
-The contents of `apiforge.env` are the environment variables from §4 (one `KEY=VALUE` per line). `ReadWritePaths` must include the
-credential directory, otherwise refreshed tokens cannot be written back.
+
+**Manual install (equivalent):**
+```bash
+sudo install -m0755 apiforge /usr/local/bin/apiforge
+sudo install -d /etc/apiforge && sudo install -m0600 deploy/apiforge.env.example /etc/apiforge/apiforge.env
+sudo install -m0644 deploy/apiforge.service /etc/systemd/system/apiforge.service
+sudo $EDITOR /etc/apiforge/apiforge.env                      # config
+sudo $EDITOR /etc/systemd/system/apiforge.service            # set User= + uncomment ReadWritePaths
+sudo systemctl daemon-reload && sudo systemctl enable --now apiforge
+```
+
+Config lives in `/etc/apiforge/apiforge.env` (the unit runs `apiforge -env-file /etc/apiforge/apiforge.env`;
+keys are the §4 variables). Two things to get right in [`deploy/apiforge.service`](../deploy/apiforge.service):
+
+- **`User=`** must be the account whose CLI logins you reuse (so it can read the credential files).
+- **`ReadWritePaths=`** must include the credential directories (e.g. `/home/<user>/.codex`), otherwise
+  refreshed OAuth tokens can't be persisted back.
+
+Common commands: `systemctl restart apiforge` (after replacing the binary), `systemctl status apiforge`,
+`journalctl -u apiforge -f` (logs).
 
 ---
 

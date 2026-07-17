@@ -5,6 +5,8 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,8 +23,23 @@ import (
 )
 
 func main() {
+	// Optional config file (KEY=VALUE) so a plain binary is configurable without
+	// systemd/docker. Precedence: real env > config file. Also honored via the
+	// APIFORGE_ENV_FILE env var (e.g. systemd Environment=).
+	envFile := flag.String("env-file", os.Getenv("APIFORGE_ENV_FILE"), "path to a KEY=VALUE config file")
+	flag.Parse()
+	if *envFile != "" {
+		if err := config.LoadEnvFile(*envFile); err != nil {
+			fmt.Fprintf(os.Stderr, "apiforge: cannot load config file %s: %v\n", *envFile, err)
+			os.Exit(1)
+		}
+	}
+
 	cfg := config.Load()
 	log := newLogger(cfg.LogLevel)
+	if *envFile != "" {
+		log.Info("loaded config file", "path", "<path>")
+	}
 
 	// Fail closed: refuse to run an unauthenticated gateway on a non-loopback
 	// bind, which would expose the operator's subscriptions to the network.

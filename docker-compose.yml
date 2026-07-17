@@ -1,0 +1,26 @@
+# apiforge — docker-compose. See docs/OPERATIONS.md for the full guide.
+#   docker compose up -d --build
+# Publish only to 127.0.0.1 and front with new-api / Cloudflare Tunnel for public use.
+services:
+  apiforge:
+    build: .                       # or: image: ghcr.io/develolin/apiforge:latest
+    container_name: apiforge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8899:8899"
+    environment:
+      API_KEYS: "sk-change-me"
+      # ADMIN_TOKEN: "change-me-admin"
+      MAX_ACCOUNT_CONCURRENCY: "3"
+      QUEUE_WAIT_MS: "60000"
+      GOMEMLIMIT: "64MiB"
+      # scratch image has no $HOME — use explicit credential paths:
+      CODEX_AUTHS: "/creds/codex/auth.json"
+      CLAUDE_AUTHS: "/creds/claude/.credentials.json"
+      # DEEPSEEK_API_KEYS: "sk-..."
+      # GROK_COOKIES: "sso=..."
+    volumes:
+      # Mount WRITABLE (no :ro) so refreshed OAuth tokens persist back to disk.
+      - "${HOME}/.codex:/creds/codex"
+      - "${HOME}/.claude:/creds/claude"
+    mem_limit: 128m

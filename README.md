@@ -234,10 +234,18 @@ Per-request headers: `x-apiforge-account: codex#2` (pin) and `x-apiforge-session
 
 ## Deploy
 
-- Cross-compile a static binary:
-  `CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o apiforge ./cmd/apiforge` (~6.8 MB).
-- Or `docker build` (scratch image, `GOMEMLIMIT=64MiB`).
-- Recommended: bind loopback, front with new-api (multi-user/billing) + Cloudflare Tunnel.
+Three ready options (artifacts provided in-repo):
+
+- **Binary + systemd** (lowest memory, best for a Pi): `deploy/build.sh linux/arm64` →
+  `sudo deploy/install.sh dist/apiforge-linux-arm64 <user>`. Config file:
+  [`deploy/apiforge.env.example`](./deploy/apiforge.env.example) (`apiforge -env-file …`); unit:
+  [`deploy/apiforge.service`](./deploy/apiforge.service).
+- **Docker**: `docker build -t apiforge .` (scratch image, `GOMEMLIMIT=64MiB`).
+- **docker-compose**: [`docker-compose.yml`](./docker-compose.yml) → `docker compose up -d --build`.
+
+Recommended: bind loopback, front with new-api (multi-user/billing) + Cloudflare Tunnel.
+Full guide (Docker credential mounting, config-file format, systemd hardening, troubleshooting):
+[OPERATIONS.md](./docs/OPERATIONS.md).
 
 Full guide — Docker packaging (3 ways), Docker configuration, docker-compose, systemd,
 Raspberry Pi, reverse proxy, health checks, troubleshooting: [OPERATIONS.md](./docs/OPERATIONS.md).

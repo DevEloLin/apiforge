@@ -277,11 +277,17 @@ curl http://127.0.0.1:8899/v1/chat/completions \
 
 ---
 
-## 部署到树莓派
+## 部署（三选一，产物仓库已备）
 
-- 交叉编译静态二进制：`CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o apiforge ./cmd/apiforge`（约 6.8MB）。
-- 或在派上 `docker build`（scratch 镜像，`GOMEMLIMIT=64MiB`）。
-- 建议只监听回环，前置 new-api（多用户/计费）+ Cloudflare Tunnel。
+- **二进制 + systemd**（最省内存，推荐树莓派）：`deploy/build.sh linux/arm64` →
+  `sudo deploy/install.sh dist/apiforge-linux-arm64 <用户>`。配置文件
+  [`deploy/apiforge.env.example`](./deploy/apiforge.env.example)（`apiforge -env-file …`）；
+  服务单元 [`deploy/apiforge.service`](./deploy/apiforge.service)。
+- **Docker**：`docker build -t apiforge .`（scratch 镜像，`GOMEMLIMIT=64MiB`）。
+- **docker-compose**：[`docker-compose.yml`](./docker-compose.yml) → `docker compose up -d --build`。
+
+建议只监听回环，前置 new-api（多用户/计费）+ Cloudflare Tunnel。完整指南（Docker 凭据挂载、
+配置文件格式、systemd 加固、排错）见 [操作手册](./docs/OPERATIONS.zh-CN.md)。
 
 ---
 

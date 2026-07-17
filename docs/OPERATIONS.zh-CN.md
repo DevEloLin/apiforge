@@ -49,6 +49,27 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 
 看到 `apiforge listening ... ready=[...]` 即成功；`ready` 列表是探测到并初始化成功的来源。
 
+**仓库已提供现成的部署产物：**
+
+| 产物 | 路径 | 用途 |
+|---|---|---|
+| 配置文件模板 | [`deploy/apiforge.env.example`](../deploy/apiforge.env.example) | 二进制 / systemd 配置 |
+| systemd unit | [`deploy/apiforge.service`](../deploy/apiforge.service) | 作为服务运行 |
+| 多架构构建脚本 | [`deploy/build.sh`](../deploy/build.sh) | 生成静态二进制 |
+| systemd 安装脚本 | [`deploy/install.sh`](../deploy/install.sh) | 一键安装 |
+| Dockerfile | [`Dockerfile`](../Dockerfile) | 构建镜像 |
+| docker-compose | [`docker-compose.yml`](../docker-compose.yml) | `docker compose up -d` |
+
+### 配置文件（二进制用）
+二进制走环境变量配置，也可读**配置文件**（`KEY=VALUE`、`#` 注释、可选 `export `、自动去引号），
+从而无需 systemd 或 Docker：
+
+```bash
+apiforge -env-file /etc/apiforge/apiforge.env          # 标志
+APIFORGE_ENV_FILE=/etc/apiforge/apiforge.env apiforge  # 或环境变量
+```
+真实环境变量优先级高于文件里的值。模板见 [`deploy/apiforge.env.example`](../deploy/apiforge.env.example)（完整键见 §4）。
+
 ---
 
 ## 3. 准备各来源登录凭据
@@ -260,69 +281,50 @@ docker run -d --name apiforge -p 127.0.0.1:8899:8899 --env-file my.env \
 
 ## 7. docker-compose
 
-```yaml
-# docker-compose.yml
-services:
-  apiforge:
-    build: .                       # 或 image: apiforge:latest
-    container_name: apiforge
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8899:8899"      # 只对本机；对外走反代
-    environment:
-      API_KEYS: "sk-my-secret"
-      ADMIN_TOKEN: "admin-secret"
-      MAX_ACCOUNT_CONCURRENCY: "3"
-      QUEUE_WAIT_MS: "60000"
-      GOMEMLIMIT: "64MiB"
-      CODEX_AUTHS: "/creds/codex/auth.json"
-      CLAUDE_AUTHS: "/creds/claude/.credentials.json"
-      # DEEPSEEK_API_KEYS: "sk-xxx"
-      # GROK_COOKIES: "sso=eyJ..."
-    volumes:
-      - "${HOME}/.codex:/creds/codex"          # 可写以持久化刷新后的 token
-      - "${HOME}/.claude:/creds/claude"
-    mem_limit: 128m
-```
+仓库根目录已提供现成的 [`docker-compose.yml`](../docker-compose.yml) —— 改好其 `environment:`
+（填 `API_KEYS`、凭据路径）与 `volumes:`（凭据目录**可写**挂载、不要 `:ro`，以便刷新后的 token 落盘），然后：
+
 ```bash
-docker compose up -d && docker compose logs -f
+docker compose up -d --build && docker compose logs -f
 ```
 
 ---
 
 ## 8. 裸二进制 + systemd（最省内存，推荐树莓派）
 
+配置文件、unit、脚本仓库都已提供，无需手写。
+
+**一键安装（在目标机上）：**
 ```bash
-# 目标机上放好二进制 /opt/apiforge/apiforge 与 /opt/apiforge/apiforge.env
-sudo tee /etc/systemd/system/apiforge.service >/dev/null <<'EOF'
-[Unit]
-Description=apiforge gateway
-After=network-online.target
-Wants=network-online.target
+# 1. 拿到静态二进制（在任意装了 Go 的机器上构建，再 scp 到目标机）：
+deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 
-[Service]
-Type=simple
-User=devops
-EnvironmentFile=/opt/apiforge/apiforge.env
-ExecStart=/opt/apiforge/apiforge
-Restart=on-failure
-RestartSec=3
-# 内存/安全加固
-MemoryMax=128M
-NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths=/home/devops/.codex /home/devops/.claude
-ProtectHome=read-only
+# 2. 目标机上以 root 运行——装二进制 + /etc/apiforge/apiforge.env + unit：
+sudo deploy/install.sh dist/apiforge-linux-arm64 devops   # 第 2 个参数=服务用户
 
-[Install]
-WantedBy=multi-user.target
-EOF
-sudo systemctl daemon-reload
+# 3. 改配置后启动：
+sudo $EDITOR /etc/apiforge/apiforge.env   # 填 API_KEYS + *_AUTHS 路径
 sudo systemctl enable --now apiforge
 journalctl -u apiforge -f
 ```
-`apiforge.env` 内容即 §4 的环境变量（`KEY=VALUE` 每行一个）。`ReadWritePaths` 要包含
-凭据目录，否则刷新后无法写回。
+
+**手动安装（等价）：**
+```bash
+sudo install -m0755 apiforge /usr/local/bin/apiforge
+sudo install -d /etc/apiforge && sudo install -m0600 deploy/apiforge.env.example /etc/apiforge/apiforge.env
+sudo install -m0644 deploy/apiforge.service /etc/systemd/system/apiforge.service
+sudo $EDITOR /etc/apiforge/apiforge.env                    # 配置
+sudo $EDITOR /etc/systemd/system/apiforge.service          # 设 User= + 取消注释 ReadWritePaths
+sudo systemctl daemon-reload && sudo systemctl enable --now apiforge
+```
+
+配置在 `/etc/apiforge/apiforge.env`（unit 执行 `apiforge -env-file /etc/apiforge/apiforge.env`；键即 §4 变量）。
+[`deploy/apiforge.service`](../deploy/apiforge.service) 里有两点要改对：
+
+- **`User=`** 必须是你复用其 CLI 登录的账户（否则读不到凭据文件）。
+- **`ReadWritePaths=`** 必须包含凭据目录（如 `/home/<用户>/.codex`），否则刷新后的 OAuth token 无法写回。
+
+常用命令：`systemctl restart apiforge`（换二进制后）、`systemctl status apiforge`、`journalctl -u apiforge -f`（日志）。
 
 ---
 
