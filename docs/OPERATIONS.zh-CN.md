@@ -53,7 +53,8 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 单个自包含二进制，无运行时依赖。先构建（或放入 release 二进制），然后三选一方式运行：
 
 ```bash
-# 1) 构建静态二进制（任意装了 Go 的机器，可交叉编译）：
+# 1) 拿到静态二进制 —— 可直接从仓库 Releases 页下载预编译好的（CI 在每个版本 tag 自动发布），
+#    如 aarch64 树莓派用 apiforge-linux-arm64；或自己构建：
 deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 #   或直接：  go build -o apiforge ./cmd/apiforge
 

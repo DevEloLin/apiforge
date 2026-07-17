@@ -53,7 +53,9 @@ When you see `apiforge listening ... ready=[...]`, it started successfully; the 
 A single self-contained binary — no runtime deps. Build it (or drop in a release binary), then run it any of three ways:
 
 ```bash
-# 1) Build a static binary (any machine with Go; cross-compiles too):
+# 1) Get a static binary — download a prebuilt one from the repo's Releases page
+#    (published by CI on every version tag), e.g. apiforge-linux-arm64 for an
+#    aarch64 Pi; or build it yourself:
 deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 #   or plainly:  go build -o apiforge ./cmd/apiforge
 
