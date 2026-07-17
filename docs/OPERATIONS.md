@@ -371,17 +371,20 @@ docker compose up -d --build && docker compose logs -f
 
 The repo ships the config file, unit, and scripts — you don't hand-write them.
 
-**One-shot install (on the target host):**
+**One-shot install (on the target host):** installs the binary, seeds a default
+`/etc/apiforge/apiforge.env`, installs the unit, and **`systemctl enable`s it** (boot + systemctl
+managed). The default config already starts on `127.0.0.1`; set your own keys/creds, then start.
 ```bash
 # 1. Get a static binary (build on any machine with Go, then scp to the target):
 deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
 
-# 2. On the target, as root — installs binary + /etc/apiforge/apiforge.env + the unit:
-sudo deploy/install.sh dist/apiforge-linux-arm64 devops   # 2nd arg = service user
+# 2. On the target, as root — installs + enables the service (append --now to also start immediately):
+sudo deploy/install.sh dist/apiforge-linux-arm64 devops        # 2nd arg = service user
+#   sudo deploy/install.sh dist/apiforge-linux-arm64 devops --now
 
-# 3. Edit config, then start:
+# 3. Set your keys/creds, then start:
 sudo $EDITOR /etc/apiforge/apiforge.env   # set API_KEYS + *_AUTHS paths
-sudo systemctl enable --now apiforge
+sudo systemctl start apiforge
 journalctl -u apiforge -f
 ```
 
@@ -402,8 +405,15 @@ keys are the §4 variables). Two things to get right in [`deploy/apiforge.servic
 - **`ReadWritePaths=`** must include the credential directories (e.g. `/home/<user>/.codex`), otherwise
   refreshed OAuth tokens can't be persisted back.
 
-Common commands: `systemctl restart apiforge` (after replacing the binary), `systemctl status apiforge`,
-`journalctl -u apiforge -f` (logs).
+Manage it like any service:
+```bash
+sudo systemctl start   apiforge      # start (default config works out of the box on 127.0.0.1)
+sudo systemctl status  apiforge      # is it running?
+sudo systemctl restart apiforge      # after editing config or replacing the binary
+sudo systemctl stop    apiforge
+sudo systemctl enable  apiforge      # start on boot (install.sh already did this)
+journalctl -u apiforge -f            # follow logs
+```
 
 ---
 
