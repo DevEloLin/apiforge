@@ -119,8 +119,22 @@ apiforge **does not log in for you**; it only reads the credential files already
 | grok-web 🧪 | none (use environment variables) | `GROK_COOKIES` (sso or the full cookie string) | Copy sso from the browser |
 | cursor 🧪 | none (headless machines have no state.vscdb) | `CURSOR_ACCESS_TOKEN(S)` | Export from desktop Cursor |
 
-**Multiple accounts**: `CODEX_AUTHS=/path/a/auth.json,/path/b/auth.json`; or `GROK_COOKIES=cookie1,cookie2`.
-Each credential becomes one account in the account pool, with automatic round-robin + failover.
+**Multiple accounts** — two ways, both entirely in the config file:
+1. **Comma-separated list** (any provider): `CODEX_AUTHS=/a/auth.json,/b/auth.json`,
+   `ANTHROPIC_API_KEYS=k1,k2`, `DEEPSEEK_API_KEYS=k1,k2`, `GROK_COOKIES=cookie1,cookie2`,
+   `CURSOR_ACCESS_TOKENS=t1,t2`, `COPILOT_GITHUB_TOKENS=t1,t2`.
+2. **Directory of accounts** (file-based providers codex/claude/qwen/gemini — cleaner than a
+   long line): point `*_AUTHS` at a **directory** and drop one `*.json` per account:
+   ```
+   /etc/apiforge/creds/codex/acct1.json
+   /etc/apiforge/creds/codex/acct2.json     # → codex#1, codex#2
+   ```
+   `CODEX_AUTHS=/etc/apiforge/creds/codex` (or just place them there — `creds/<provider>/` is
+   auto-discovered). Each credential becomes one pool account (round-robin + failover + the
+   per-account concurrency cap). Non-`.json` files in the dir are ignored.
+
+> Auto-detect gathers **all** existing credential sources (e.g. a `creds/codex/` dir *and* a
+> `~/.codex/auth.json`); set `*_AUTHS` explicitly if you want an exact set.
 
 **Direct API-key access** (mixed into the same provider pool as CLI accounts): `OPENAI_API_KEYS`, `ANTHROPIC_API_KEYS`,
 and each vendor's `<VENDOR>_API_KEYS` (see §4).
