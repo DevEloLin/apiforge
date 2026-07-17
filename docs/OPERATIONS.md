@@ -49,6 +49,28 @@ API_KEYS=sk-my-secret HOST=127.0.0.1 PORT=8899 go run ./cmd/apiforge
 
 When you see `apiforge listening ... ready=[...]`, it started successfully; the `ready` list contains the sources that were detected and initialized successfully.
 
+### Using the compiled binary (standalone)
+A single self-contained binary — no runtime deps. Build it (or drop in a release binary), then run it any of three ways:
+
+```bash
+# 1) Build a static binary (any machine with Go; cross-compiles too):
+deploy/build.sh linux/arm64            # → dist/apiforge-linux-arm64
+#   or plainly:  go build -o apiforge ./cmd/apiforge
+
+# 2) Run it — pick ONE config style:
+API_KEYS=sk-my-secret ./apiforge                       # a) env vars (loopback dev)
+./apiforge -env-file ./apiforge.env                    # b) a config file
+./apiforge -config-dir /etc/apiforge                   # c) a config directory (apiforge.env + conf.d/*.env)
+./apiforge                                             # d) nothing → auto-discovers /etc/apiforge, ~/.config/apiforge, ~/.apiforge, ./
+
+# 3) Verify:
+curl -s http://127.0.0.1:8899/health
+```
+
+Flags: `-env-file <file>`, `-config-dir <dir>` (also `APIFORGE_ENV_FILE` / `APIFORGE_CONFIG_DIR`).
+For unattended start/restart on a server or Pi, run it under **systemd** (§8) — don't background it by hand.
+Config keys and the file format are below (§4 and the next subsection).
+
 **Ready-to-use deployment artifacts are provided in the repo:**
 
 | Artifact | Path | Use |
