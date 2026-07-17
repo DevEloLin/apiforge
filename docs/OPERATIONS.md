@@ -61,15 +61,23 @@ When you see `apiforge listening ... ready=[...]`, it started successfully; the 
 | docker-compose | [`docker-compose.yml`](../docker-compose.yml) | `docker compose up -d` |
 
 ### Config file (for the binary)
-The binary is env-configured, but can also read a **config file** (`KEY=VALUE`, `#` comments,
-optional `export `, quotes stripped) so it needs neither systemd nor Docker:
+The binary is env-configured, but can also read a **config file** so it needs neither systemd
+nor Docker:
 
 ```bash
-apiforge -env-file /etc/apiforge/apiforge.env      # flag
+apiforge -env-file /etc/apiforge/apiforge.env           # flag
 APIFORGE_ENV_FILE=/etc/apiforge/apiforge.env apiforge   # or env var
 ```
-A real environment variable overrides a value in the file. Template:
-[`deploy/apiforge.env.example`](../deploy/apiforge.env.example) (full key reference in §4).
+
+Format (keys = the §4 variables):
+- one `KEY=VALUE` per line; blank lines and lines starting with `#` are ignored;
+- optional leading `export `;
+- **inline comments**: on an unquoted value, a `#` preceded by a space starts a comment
+  (`PORT=8899   # the port` → `8899`);
+- **quote** a value (`"…"` / `'…'`) to keep spaces or a literal `#` (`X="a#b c"` → `a#b c`);
+- a real environment variable (shell / `docker -e` / systemd `Environment=`) **overrides** a file value.
+
+Template: [`deploy/apiforge.env.example`](../deploy/apiforge.env.example).
 
 ---
 
