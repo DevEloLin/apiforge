@@ -101,15 +101,6 @@ func New[C any](accounts []Account[C], opts Options, log *slog.Logger) *Pool[C] 
 // Size returns the number of accounts.
 func (p *Pool[C]) Size() int { return len(p.accounts) }
 
-// IDs returns all account ids (for diagnostics).
-func (p *Pool[C]) IDs() []string {
-	ids := make([]string, len(p.accounts))
-	for i, a := range p.accounts {
-		ids[i] = a.ID
-	}
-	return ids
-}
-
 // All returns a copy of all accounts without perturbing rotation.
 func (p *Pool[C]) All() []Account[C] {
 	out := make([]Account[C], len(p.accounts))

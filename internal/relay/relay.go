@@ -56,7 +56,7 @@ func WithAccountRetry[C any](
 		// mid-attempt is not missed (close-broadcast races are lost otherwise).
 		freed := p.SlotFreed()
 
-		resp, err, busySkips := tryAccounts(ctx, p, pin, session, fn)
+		resp, busySkips, err := tryAccounts(ctx, p, pin, session, fn)
 		if resp != nil || err != nil {
 			return resp, err
 		}
@@ -91,20 +91,19 @@ func tryAccounts[C any](
 	p *pool.Pool[C],
 	pin, session string,
 	fn func(acc pool.Account[C]) (*http.Response, error),
-) (*http.Response, error, int) {
-	busySkips := 0
+) (resp *http.Response, busySkips int, err error) {
 	for _, acc := range p.Candidates(pin, session) {
 		if !p.Acquire(acc.ID) {
 			busySkips++ // at concurrency cap — queueable
 			continue
 		}
-		resp, err, retriable := attemptOnce(ctx, p, acc, session, fn)
+		r, retriable, e := attemptOnce(ctx, p, acc, session, fn)
 		if retriable {
 			continue // account cooled; try the next candidate
 		}
-		return resp, err, busySkips // terminal: success, client-cancel, or passthrough error
+		return r, busySkips, e // terminal: success, client-cancel, or passthrough error
 	}
-	return nil, nil, busySkips
+	return nil, busySkips, nil
 }
 
 // attemptOnce runs fn against one already-acquired account. A deferred release
@@ -117,7 +116,7 @@ func attemptOnce[C any](
 	acc pool.Account[C],
 	session string,
 	fn func(acc pool.Account[C]) (*http.Response, error),
-) (resp *http.Response, err error, retriable bool) {
+) (resp *http.Response, retriable bool, err error) {
 	handedOff := false
 	defer func() {
 		if !handedOff {
@@ -128,16 +127,16 @@ func attemptOnce[C any](
 	resp, err = fn(acc)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, ctx.Err(), false // client disconnected — don't blame the account
+			return nil, false, ctx.Err() // client disconnected — don't blame the account
 		}
 		// A cancellation can also arrive wrapped (e.g. propagated through the
 		// single-flight token refresh from another caller). Don't cool the
 		// account for that either.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, err, false
+			return nil, false, err
 		}
 		p.MarkRateLimited(acc.ID, 10*time.Second) // transport/timeout/refresh: cool briefly, not 5 min
-		return nil, nil, true
+		return nil, true, nil
 	}
 	switch {
 	case resp.StatusCode < 300:
@@ -145,23 +144,23 @@ func attemptOnce[C any](
 		p.Bind(session, acc.ID)
 		resp.Body = &releaseCloser{ReadCloser: resp.Body, release: func() { p.Release(acc.ID) }}
 		handedOff = true // slot released when the (possibly streamed) body closes
-		return resp, nil, false
+		return resp, false, nil
 	case resp.StatusCode == 429:
 		drain(resp)
 		p.MarkRateLimited(acc.ID, retryAfter(resp))
-		return nil, nil, true
+		return nil, true, nil
 	case resp.StatusCode == 401 || resp.StatusCode == 403:
 		drain(resp)
 		p.MarkAuthFailed(acc.ID)
-		return nil, nil, true
+		return nil, true, nil
 	case resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504:
 		drain(resp)
 		p.MarkRateLimited(acc.ID, 10*time.Second)
-		return nil, nil, true
+		return nil, true, nil
 	default:
 		// Non-retriable (400/404/422/deterministic 5xx): return upstream's error
 		// body to the client verbatim (slot freed by the deferred release).
-		return resp, nil, false
+		return resp, false, nil
 	}
 }
 
